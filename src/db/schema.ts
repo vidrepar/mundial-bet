@@ -19,24 +19,10 @@ export const user = sqliteTable("user", {
     .notNull()
     .default(false),
   image: text("image"),
-  /* per-user Telegram link for personal reminders (set via the bot) */
-  telegramChatId: text("telegram_chat_id"),
-  telegramUsername: text("telegram_username"),
   createdAt: integer("createdAt", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
   updatedAt: integer("updatedAt", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(unixepoch())`),
-});
-
-/* one-time tokens that bind a Telegram chat to a user via the bot's /start */
-export const telegramLink = sqliteTable("telegram_link", {
-  token: text("token").primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
 });

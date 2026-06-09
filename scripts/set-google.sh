@@ -24,5 +24,6 @@ set_kv() {
 
 set_kv GOOGLE_CLIENT_ID "$ID"
 set_kv GOOGLE_CLIENT_SECRET "$SECRET"
+set_kv NEXT_PUBLIC_GOOGLE_ENABLED "true"
 
-echo "✅ wrote GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET to .env — restart 'pnpm dev'."
+echo "✅ wrote Google creds + enabled the button in .env — restart 'pnpm dev'."
