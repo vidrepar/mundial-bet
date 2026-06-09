@@ -1,13 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { toast } from "sonner";
 import { GradientText } from "@/components/magicui/gradient-text";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { authClient, signIn } from "@/lib/auth-client";
+import { signIn } from "@/lib/auth-client";
 
 function GoogleIcon() {
   return (
@@ -33,12 +30,6 @@ function GoogleIcon() {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const googleEnabled = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true";
 
   function google() {
@@ -51,105 +42,21 @@ export default function LoginPage() {
     signIn.social({ provider: "google", callbackURL: "/" });
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    const res =
-      mode === "signin"
-        ? await authClient.signIn.email({ email, password })
-        : await authClient.signUp.email({
-            email,
-            password,
-            name: name || email.split("@")[0],
-          });
-    setLoading(false);
-    if (res.error) {
-      toast.error(res.error.message ?? "Something went wrong");
-      return;
-    }
-    toast.success("You're in ⚽");
-    router.push("/");
-    router.refresh();
-  }
-
   return (
-    <div className="mx-auto max-w-sm py-10">
+    <div className="mx-auto max-w-sm py-16">
       <Card className="relative overflow-hidden">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">
             <GradientText>Mundial &rsquo;26</GradientText>
           </CardTitle>
-          <CardDescription>
-            {mode === "signin"
-              ? "Sign in to place your picks"
-              : "Create your account"}
-          </CardDescription>
+          <CardDescription>Sign in to place your picks</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Google — always available on both sign in & sign up */}
-          <Button variant="outline" className="w-full" onClick={google}>
-            <GoogleIcon />
-            {mode === "signin" ? "Sign in with Google" : "Sign up with Google"}
+        <CardContent>
+          <Button className="w-full" onClick={google}>
+            <GoogleIcon /> Continue with Google
           </Button>
-
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            or email
-            <span className="h-px flex-1 bg-border" />
-          </div>
-
-          <form onSubmit={submit} className="space-y-3">
-            {mode === "signup" && (
-              <Input
-                placeholder="Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            )}
-            <Input
-              type="email"
-              placeholder="Email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <Input
-              type="password"
-              placeholder="Password (min 6)"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <Button type="submit" className="w-full" disabled={loading}>
-              {mode === "signin" ? "Sign in" : "Create account"}
-            </Button>
-          </form>
-
-          <p className="text-center text-sm text-muted-foreground">
-            {mode === "signin" ? (
-              <>
-                No account yet?{" "}
-                <button
-                  type="button"
-                  className="font-medium text-primary hover:underline"
-                  onClick={() => setMode("signup")}
-                >
-                  Create one
-                </button>
-              </>
-            ) : (
-              <>
-                Already have one?{" "}
-                <button
-                  type="button"
-                  className="font-medium text-primary hover:underline"
-                  onClick={() => setMode("signin")}
-                >
-                  Sign in
-                </button>
-              </>
-            )}
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            Invite-only — your Google email must be on the allowlist.
           </p>
         </CardContent>
       </Card>
