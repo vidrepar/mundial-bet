@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+build
+.DS_Store
+*.pem
+npm-debug.log*
+.env
+.env*.local
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/data
+next-env.d.ts
+fixtures-raw.json
