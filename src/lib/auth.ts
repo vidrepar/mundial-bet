@@ -9,6 +9,13 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
   secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-me",
   database: drizzleAdapter(db, { provider: "sqlite", schema }),
+  /* email+password works with zero external setup (Google has no CLI to mint a
+   * web OAuth client). Google is enabled too once creds are filled in. */
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: 6,
+    autoSignIn: true,
+  },
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",

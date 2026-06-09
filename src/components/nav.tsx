@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { GradientText } from "@/components/magicui/gradient-text";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
-import { signIn, signOut, useSession } from "@/lib/auth-client";
+import { signOut, useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -65,14 +65,9 @@ export function Nav() {
               </Button>
             </>
           ) : (
-            <Button
-              size="sm"
-              onClick={() =>
-                signIn.social({ provider: "google", callbackURL: "/" })
-              }
-            >
+            <Link href="/login" className={buttonVariants({ size: "sm" })}>
               Sign in
-            </Button>
+            </Link>
           )}
         </div>
       </div>
