@@ -94,7 +94,34 @@ async function handle(req: Request) {
     group = r.ok;
   }
 
-  return NextResponse.json({ ok: true, matches: soon.length, dms, group });
+  /* 6. structured payload so a free Gmail Apps Script can email everyone
+   *    who still owes picks (no OAuth client / SMTP creds needed). */
+  const recipients = users
+    .filter((u) => (missingByUser.get(u.id)?.length ?? 0) > 0)
+    .map((u) => {
+      const mm = missingByUser.get(u.id) ?? [];
+      return {
+        email: u.email,
+        name: u.name,
+        count: mm.length,
+        lines: mm.map(
+          (m) =>
+            `${m.homeFlag} ${m.homeTeam} v ${m.awayTeam} ${m.awayFlag} — ${m.kickoffUtc
+              .toISOString()
+              .slice(0, 16)
+              .replace("T", " ")} UTC`,
+        ),
+      };
+    });
+
+  return NextResponse.json({
+    ok: true,
+    matches: soon.length,
+    betUrl: `${appUrl}/bet`,
+    dms,
+    group,
+    recipients,
+  });
 }
 
 export function GET(req: Request) {

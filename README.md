@@ -70,27 +70,44 @@ restart `pnpm dev`. `ADMIN_EMAILS` (defaults to you) can enter match results.
    BETTER_AUTH_URL=https://YOUR_DOMAIN
    NEXT_PUBLIC_APP_URL=https://YOUR_DOMAIN
    BETTER_AUTH_SECRET=<openssl rand -base64 32>
-   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_ID=...                  # optional (email login works without it)
    GOOGLE_CLIENT_SECRET=...
+   NEXT_PUBLIC_GOOGLE_ENABLED=true       # set once Google creds exist → shows the button
    DATABASE_URL=/app/data/mundial.db
    ALLOWED_EMAILS=you@gmail.com,mate1@...,mate2@...,mate3@...
    ADMIN_EMAILS=you@gmail.com
-   TELEGRAM_BOT_TOKEN=...      # optional, for reminders
-   TELEGRAM_CHAT_ID=...        # your group chat id
    CRON_SECRET=<random>
+   # --- reminders, all optional ---
+   TELEGRAM_BOT_TOKEN=...      # for Telegram DMs/group posts
+   TELEGRAM_BOT_USERNAME=...   # bot handle (no @) — powers the in-app "Connect" button
+   TELEGRAM_CHAT_ID=...        # group chat id for the summary post
+   TELEGRAM_WEBHOOK_SECRET=... # random; guards /api/telegram/webhook
    ```
+   Until `NEXT_PUBLIC_GOOGLE_ENABLED=true`, the login page shows email-only (no dead Google button).
 5. Deploy. Migrations + fixtures seed on first boot. Add your domain in Coolify later.
 
-### Reminders (free, Telegram)
+### Reminders — pick any (all free)
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) → `TELEGRAM_BOT_TOKEN`.
-2. Add the bot to your group, send a message, then grab the chat id from
-   `https://api.telegram.org/bot<token>/getUpdates` → `TELEGRAM_CHAT_ID`.
-3. Coolify → your app → **Scheduled Tasks** → add an hourly cron:
+`GET /api/cron/reminders?secret=$CRON_SECRET` computes who still owes picks on
+matches within 6h and returns them as JSON (`recipients[]`), DMs linked Telegram
+users, and posts a group summary. Drive it however you like:
+
+**Option A — Gmail + Apps Script (no Telegram, no SMTP, no OAuth client).**
+Open `apps-script/reminders.gs`, paste it into <https://script.google.com>, set
+`APP_URL` + `CRON_SECRET`, authorize Gmail once, and add an hourly time-driven
+trigger. It emails each player their outstanding picks from your own Gmail. Done.
+
+**Option B — Telegram (personal DMs).**
+1. Create a bot via [@BotFather](https://t.me/BotFather) → `TELEGRAM_BOT_TOKEN` + `TELEGRAM_BOT_USERNAME`.
+2. After deploy, register the webhook:
    ```
-   curl -s "https://YOUR_DOMAIN/api/cron/reminders?secret=$CRON_SECRET"
+   curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://YOUR_DOMAIN/api/telegram/webhook&secret_token=$TELEGRAM_WEBHOOK_SECRET"
    ```
-   It pings the group about matches kicking off within 6h that still need picks.
+3. Each friend hits **Connect** on the dashboard → links their chat → gets personal DMs.
+4. Coolify → **Scheduled Tasks** → hourly: `curl -s "https://YOUR_DOMAIN/api/cron/reminders?secret=$CRON_SECRET"`.
+
+Either way, the **Coolify hourly scheduled task** (Option B step 4) is what fires it
+— Option A instead uses the Apps Script's own hourly trigger, so you don't even need Coolify cron.
 
 ## Admin: entering results
 

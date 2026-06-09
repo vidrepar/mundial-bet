@@ -39,6 +39,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const googleEnabled = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,21 +76,24 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() =>
-              signIn.social({ provider: "google", callbackURL: "/" })
-            }
-          >
-            <GoogleIcon /> Continue with Google
-          </Button>
-
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            or
-            <span className="h-px flex-1 bg-border" />
-          </div>
+          {googleEnabled && (
+            <>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() =>
+                  signIn.social({ provider: "google", callbackURL: "/" })
+                }
+              >
+                <GoogleIcon /> Continue with Google
+              </Button>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            </>
+          )}
 
           <form onSubmit={submit} className="space-y-3">
             {mode === "signup" && (
