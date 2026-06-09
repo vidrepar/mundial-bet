@@ -2,41 +2,26 @@ import { and, eq, gt, lt } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { bets, matches, user } from "@/db/schema";
+import { tgSend } from "@/lib/telegram";
 
 /* Coolify scheduled task hits this (e.g. hourly):
  *   curl -s "$APP_URL/api/cron/reminders?secret=$CRON_SECRET"
- * It pings the group's Telegram chat about matches kicking off soon
- * that someone still hasn't bet on. Free + zero infra.
+ * DMs each linked user about matches they still haven't bet on (within 6h),
+ * and optionally posts a summary to the group chat. Free + zero infra.
  */
-
 const WINDOW_HOURS = 6;
 
-async function sendTelegram(text: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) return { sent: false, reason: "telegram not configured" };
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-    }),
-  });
-  return { sent: res.ok };
-}
-
-function handle(req: Request) {
+async function handle(req: Request) {
   /* 1. auth the cron caller */
   const url = new URL(req.url);
-  const secret = url.searchParams.get("secret");
-  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+  if (
+    !process.env.CRON_SECRET ||
+    url.searchParams.get("secret") !== process.env.CRON_SECRET
+  ) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  /* 2. find matches kicking off within the window, still open */
+  /* 2. matches kicking off within the window */
   const now = new Date();
   const until = new Date(now.getTime() + WINDOW_HOURS * 3600_000);
   const soon = db
@@ -44,35 +29,72 @@ function handle(req: Request) {
     .from(matches)
     .where(and(gt(matches.kickoffUtc, now), lt(matches.kickoffUtc, until)))
     .all();
-
   if (soon.length === 0) {
-    return NextResponse.json({ ok: true, matches: 0, reminded: false });
+    return NextResponse.json({ ok: true, matches: 0, dms: 0 });
   }
 
-  /* 3. who still owes a pick? (allowlisted users with no bet) */
+  /* 3. who is missing which pick? */
   const users = db.select().from(user).all();
-  const lines: string[] = [];
+  const missingByUser = new Map<string, typeof soon>();
+  const groupLines: string[] = [];
   for (const m of soon) {
-    const placed = db
-      .select({ userId: bets.userId })
-      .from(bets)
-      .where(eq(bets.matchId, m.id))
-      .all();
-    const placedIds = new Set(placed.map((p) => p.userId));
-    const missing = users.filter((u) => !placedIds.has(u.id));
-    const kickoff = m.kickoffUtc.toISOString().slice(11, 16);
-    const missingTxt = missing.length
-      ? `⏳ still no pick: ${missing.map((u) => u.name.split(" ")[0]).join(", ")}`
-      : "✅ everyone's in";
-    lines.push(
-      `${m.homeFlag} ${m.homeTeam} vs ${m.awayTeam} ${m.awayFlag} — ${kickoff} UTC\n${missingTxt}`,
+    const placed = new Set(
+      db
+        .select({ u: bets.userId })
+        .from(bets)
+        .where(eq(bets.matchId, m.id))
+        .all()
+        .map((r) => r.u),
+    );
+    const missing = users.filter((u) => !placed.has(u.id));
+    for (const u of missing) {
+      const list = missingByUser.get(u.id) ?? [];
+      list.push(m);
+      missingByUser.set(u.id, list);
+    }
+    const kk = m.kickoffUtc.toISOString().slice(11, 16);
+    groupLines.push(
+      `${m.homeFlag} ${m.homeTeam} v ${m.awayTeam} ${m.awayFlag} — ${kk} UTC` +
+        (missing.length
+          ? ` · ⏳ ${missing.map((u) => u.name.split(" ")[0]).join(", ")}`
+          : " · ✅"),
     );
   }
 
-  const text = `⚽ <b>Mundial '26 — bets close soon!</b>\n\n${lines.join("\n\n")}\n\n👉 ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/bet`;
-  return sendTelegram(text).then((r) =>
-    NextResponse.json({ ok: true, matches: soon.length, telegram: r }),
-  );
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+  /* 4. personal DMs to linked users with outstanding picks */
+  let dms = 0;
+  for (const u of users) {
+    if (!u.telegramChatId) continue;
+    const mm = missingByUser.get(u.id);
+    if (!mm?.length) continue;
+    const lines = mm
+      .map(
+        (m) =>
+          `• ${m.homeFlag} ${m.homeTeam} v ${m.awayTeam} ${m.awayFlag} — ${m.kickoffUtc
+            .toISOString()
+            .slice(11, 16)} UTC`,
+      )
+      .join("\n");
+    const r = await tgSend(
+      u.telegramChatId,
+      `⚽ <b>Bets closing soon!</b>\nYou still owe picks on:\n${lines}\n\n👉 ${appUrl}/bet`,
+    );
+    if (r.ok) dms++;
+  }
+
+  /* 5. optional group summary */
+  let group = false;
+  if (process.env.TELEGRAM_CHAT_ID) {
+    const r = await tgSend(
+      process.env.TELEGRAM_CHAT_ID,
+      `⚽ <b>Mundial '26 — next ${WINDOW_HOURS}h</b>\n\n${groupLines.join("\n")}\n\n👉 ${appUrl}/bet`,
+    );
+    group = r.ok;
+  }
+
+  return NextResponse.json({ ok: true, matches: soon.length, dms, group });
 }
 
 export function GET(req: Request) {

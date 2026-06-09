@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import { GradientText } from "@/components/magicui/gradient-text";
 import { NumberTicker } from "@/components/magicui/number-ticker";
+import { TelegramConnect } from "@/components/telegram-connect";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,6 +67,8 @@ export default function HomePage() {
           accent
         />
       </section>
+
+      {session?.user && <TelegramConnect />}
 
       {/* standings preview */}
       <section className="space-y-3">

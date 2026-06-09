@@ -6,6 +6,7 @@ import { betsRouter } from "./bets";
 import { leaderboardRouter } from "./leaderboard";
 import { matchesRouter } from "./matches";
 import { statsRouter } from "./stats";
+import { telegramRouter } from "./telegram";
 
 export const appRouter = createTRPCRouter({
   matches: matchesRouter,
@@ -15,4 +16,5 @@ export const appRouter = createTRPCRouter({
   analytics: analyticsRouter,
   awards: awardsRouter,
   admin: adminRouter,
+  telegram: telegramRouter,
 });
