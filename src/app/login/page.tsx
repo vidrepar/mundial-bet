@@ -41,6 +41,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const googleEnabled = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true";
 
+  function google() {
+    if (!googleEnabled) {
+      toast.error(
+        "Google isn't configured yet — run scripts/set-google.sh then restart.",
+      );
+      return;
+    }
+    signIn.social({ provider: "google", callbackURL: "/" });
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -70,80 +80,77 @@ export default function LoginPage() {
             <GradientText>Mundial &rsquo;26</GradientText>
           </CardTitle>
           <CardDescription>
-            {googleEnabled
-              ? "Sign in with your Google account"
-              : mode === "signin"
-                ? "Sign in to place your picks"
-                : "Create your account"}
+            {mode === "signin"
+              ? "Sign in to place your picks"
+              : "Create your account"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {googleEnabled ? (
-            <Button
-              className="w-full"
-              onClick={() =>
-                signIn.social({ provider: "google", callbackURL: "/" })
-              }
-            >
-              <GoogleIcon /> Continue with Google
-            </Button>
-          ) : (
-            <>
-              <form onSubmit={submit} className="space-y-3">
-                {mode === "signup" && (
-                  <Input
-                    placeholder="Name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                )}
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-                <Input
-                  type="password"
-                  placeholder="Password (min 6)"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {mode === "signin" ? "Sign in" : "Create account"}
-                </Button>
-              </form>
+          {/* Google — always available on both sign in & sign up */}
+          <Button variant="outline" className="w-full" onClick={google}>
+            <GoogleIcon />
+            {mode === "signin" ? "Sign in with Google" : "Sign up with Google"}
+          </Button>
 
-              <p className="text-center text-sm text-muted-foreground">
-                {mode === "signin" ? (
-                  <>
-                    No account yet?{" "}
-                    <button
-                      type="button"
-                      className="font-medium text-primary hover:underline"
-                      onClick={() => setMode("signup")}
-                    >
-                      Create one
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    Already have one?{" "}
-                    <button
-                      type="button"
-                      className="font-medium text-primary hover:underline"
-                      onClick={() => setMode("signin")}
-                    >
-                      Sign in
-                    </button>
-                  </>
-                )}
-              </p>
-            </>
-          )}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            or email
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <form onSubmit={submit} className="space-y-3">
+            {mode === "signup" && (
+              <Input
+                placeholder="Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            )}
+            <Input
+              type="email"
+              placeholder="Email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <Input
+              type="password"
+              placeholder="Password (min 6)"
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <Button type="submit" className="w-full" disabled={loading}>
+              {mode === "signin" ? "Sign in" : "Create account"}
+            </Button>
+          </form>
+
+          <p className="text-center text-sm text-muted-foreground">
+            {mode === "signin" ? (
+              <>
+                No account yet?{" "}
+                <button
+                  type="button"
+                  className="font-medium text-primary hover:underline"
+                  onClick={() => setMode("signup")}
+                >
+                  Create one
+                </button>
+              </>
+            ) : (
+              <>
+                Already have one?{" "}
+                <button
+                  type="button"
+                  className="font-medium text-primary hover:underline"
+                  onClick={() => setMode("signin")}
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </p>
         </CardContent>
       </Card>
     </div>
