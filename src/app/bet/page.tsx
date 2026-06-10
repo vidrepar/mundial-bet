@@ -24,13 +24,13 @@ export default function BetPage() {
   const [filter, setFilter] = useState<Filter>("open");
 
   const matches = useQuery(trpc.matches.list.queryOptions({ filter }));
-  const admin = useQuery({
-    ...trpc.admin.amAdmin.queryOptions(),
-    enabled: !!session?.user,
-  });
-
   const signedIn = !!session?.user;
-  const isAdmin = !!admin.data?.isAdmin;
+  const unread = useQuery({
+    ...trpc.comments.unread.queryOptions(),
+    enabled: signedIn,
+    refetchInterval: 30_000,
+  });
+  const unreadByMatch = unread.data?.byMatch ?? {};
 
   /* group matches by calendar day */
   const groups = new Map<string, NonNullable<typeof matches.data>>();
@@ -93,7 +93,7 @@ export default function BetPage() {
               key={m.id}
               match={m}
               signedIn={signedIn}
-              isAdmin={isAdmin}
+              unread={unreadByMatch[m.id] ?? 0}
             />
           ))}
         </section>

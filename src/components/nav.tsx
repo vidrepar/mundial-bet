@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -8,6 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
 import { signOut, useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { useTRPC } from "@/trpc/client";
 
 const LINKS = [
   { href: "/bet", label: "Bet" },
@@ -20,6 +22,13 @@ const LINKS = [
 export function Nav() {
   const pathname = usePathname();
   const { data: session, isPending } = useSession();
+  const trpc = useTRPC();
+  const unread = useQuery({
+    ...trpc.comments.unread.queryOptions(),
+    enabled: !!session?.user,
+    refetchInterval: 30_000,
+  });
+  const totalUnread = unread.data?.total ?? 0;
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
@@ -38,11 +47,16 @@ export function Nav() {
               href={l.href}
               className={cn(
                 buttonVariants({ variant: "ghost", size: "sm" }),
-                "text-muted-foreground",
+                "relative text-muted-foreground",
                 pathname === l.href && "bg-accent text-foreground",
               )}
             >
               {l.label}
+              {l.href === "/bet" && totalUnread > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex size-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                  {totalUnread > 9 ? "9+" : totalUnread}
+                </span>
+              )}
             </Link>
           ))}
         </nav>

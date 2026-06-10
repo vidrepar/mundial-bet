@@ -51,7 +51,7 @@ export default function LeaderboardPage() {
                     <NumberTicker value={r.points} />
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    🎯 {r.exact} · ✓ {r.outcome}
+                    🎯 {r.exact} · ✅ {r.hits}
                   </p>
                 </CardContent>
               </Card>
@@ -70,8 +70,8 @@ export default function LeaderboardPage() {
                 <TableHead>Player</TableHead>
                 <TableHead className="text-right">Pts</TableHead>
                 <TableHead className="text-right">Exact</TableHead>
-                <TableHead className="text-right">Outcome</TableHead>
-                <TableHead className="text-right">Bets</TableHead>
+                <TableHead className="text-right">Hits</TableHead>
+                <TableHead className="text-right">Missed</TableHead>
                 <TableHead className="text-right">Hit %</TableHead>
               </TableRow>
             </TableHeader>
@@ -95,9 +95,9 @@ export default function LeaderboardPage() {
                     {r.points}
                   </TableCell>
                   <TableCell className="text-right">{r.exact}</TableCell>
-                  <TableCell className="text-right">{r.outcome}</TableCell>
+                  <TableCell className="text-right">{r.hits}</TableCell>
                   <TableCell className="text-right text-muted-foreground">
-                    {r.total}
+                    {r.missed ? `−${r.missed}` : 0}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
                     {r.hitRate}%

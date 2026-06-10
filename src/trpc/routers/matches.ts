@@ -2,8 +2,10 @@ import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { bets, matches } from "@/db/schema";
+import { TrpcError } from "@/lib/errors";
 import { shapeMatch } from "@/lib/match-shape";
-import { baseProcedure, createTRPCRouter } from "../init";
+import { scoreBet } from "@/lib/scoring";
+import { baseProcedure, createTRPCRouter, protectedProcedure } from "../init";
 
 const filterSchema = z
   .enum(["all", "upcoming", "live", "finished", "open"])
@@ -22,7 +24,6 @@ export const matchesRouter = createTRPCRouter({
         .orderBy(asc(matches.kickoffUtc))
         .all();
 
-      /* bet counts per match in one shot */
       const counts = db
         .select({ matchId: bets.matchId, c: sql<number>`count(*)` })
         .from(bets)
@@ -30,7 +31,6 @@ export const matchesRouter = createTRPCRouter({
         .all();
       const countMap = new Map(counts.map((r) => [r.matchId, Number(r.c)]));
 
-      /* my bets if signed in */
       const myBetMap = new Map<number, (typeof bets.$inferSelect)>();
       if (ctx.user) {
         const mine = db
@@ -55,9 +55,7 @@ export const matchesRouter = createTRPCRouter({
         case "upcoming":
           return shaped.filter((m) => !m.finished && m.kickoffMs > nowMs);
         case "live":
-          return shaped.filter(
-            (m) => !m.finished && m.kickoffMs <= nowMs,
-          );
+          return shaped.filter((m) => !m.finished && m.kickoffMs <= nowMs);
         case "finished":
           return shaped.filter((m) => m.finished);
         default:
@@ -87,5 +85,75 @@ export const matchesRouter = createTRPCRouter({
             .get() ?? null;
       }
       return shapeMatch(m, { myBet, betCount: Number(count?.c ?? 0) });
+    }),
+
+  /* anyone signed in can enter/fix a result — but only once the match has
+   * kicked off (you can't pre-enter a result). Scores everyone's bets. */
+  setResult: protectedProcedure
+    .input(
+      z.object({
+        matchId: z.number().int(),
+        homeScore: z.number().int().min(0).max(30),
+        awayScore: z.number().int().min(0).max(30),
+      }),
+    )
+    .mutation(({ input }) => {
+      const m = db
+        .select()
+        .from(matches)
+        .where(eq(matches.id, input.matchId))
+        .get();
+      if (!m) throw TrpcError.notFound("Match not found.");
+      if (Date.now() < m.kickoffUtc.getTime()) {
+        throw TrpcError.badRequest(
+          "You can only enter a result after the match has kicked off.",
+        );
+      }
+
+      db.update(matches)
+        .set({
+          homeScore: input.homeScore,
+          awayScore: input.awayScore,
+          finished: true,
+          status: "finished",
+        })
+        .where(eq(matches.id, input.matchId))
+        .run();
+
+      const matchBets = db
+        .select()
+        .from(bets)
+        .where(eq(bets.matchId, input.matchId))
+        .all();
+      for (const b of matchBets) {
+        const pts = scoreBet(
+          b.predHome,
+          b.predAway,
+          input.homeScore,
+          input.awayScore,
+          m.stage,
+        );
+        db.update(bets).set({ points: pts }).where(eq(bets.id, b.id)).run();
+      }
+      return { ok: true, scored: matchBets.length };
+    }),
+
+  reopen: protectedProcedure
+    .input(z.object({ matchId: z.number().int() }))
+    .mutation(({ input }) => {
+      db.update(matches)
+        .set({
+          finished: false,
+          status: "scheduled",
+          homeScore: null,
+          awayScore: null,
+        })
+        .where(eq(matches.id, input.matchId))
+        .run();
+      db.update(bets)
+        .set({ points: null })
+        .where(eq(bets.matchId, input.matchId))
+        .run();
+      return { ok: true };
     }),
 });

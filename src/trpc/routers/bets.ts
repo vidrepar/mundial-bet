@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { bets, matches, user } from "@/db/schema";
 import { TrpcError } from "@/lib/errors";
+import { isKnockoutStage } from "@/lib/scoring";
 import { baseProcedure, createTRPCRouter, protectedProcedure } from "../init";
 
 const placeInput = z.object({
@@ -25,6 +26,13 @@ export const betsRouter = createTRPCRouter({
     /* 2. betting closes at kickoff */
     if (m.finished || Date.now() >= m.kickoffUtc.getTime()) {
       throw TrpcError.badRequest("Betting is closed for this match.");
+    }
+
+    /* 3. no draws in the knockout stage (predict the winner after ET/pens) */
+    if (isKnockoutStage(m.stage) && input.predHome === input.predAway) {
+      throw TrpcError.badRequest(
+        "No draws in knockouts — pick a winner (penalties add +1 goal).",
+      );
     }
 
     /* 3. upsert the bet */

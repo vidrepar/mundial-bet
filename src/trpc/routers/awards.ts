@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { bets, matches, user } from "@/db/schema";
+import { isExactScore } from "@/lib/scoring";
 import { baseProcedure, createTRPCRouter } from "../init";
 
 export const awardsRouter = createTRPCRouter({
@@ -13,7 +14,15 @@ export const awardsRouter = createTRPCRouter({
     const stats = users.map((u) => {
       const ub = allBets.filter((b) => b.userId === u.id);
       const scored = ub.filter((b) => b.points != null);
-      const exact = scored.filter((b) => b.points === 3).length;
+      const exact = scored.filter((b) => {
+        const m = mById.get(b.matchId);
+        return (
+          m != null &&
+          m.homeScore != null &&
+          m.awayScore != null &&
+          isExactScore(b.predHome, b.predAway, m.homeScore, m.awayScore)
+        );
+      }).length;
       const hits = scored.filter((b) => (b.points ?? 0) > 0).length;
       const avgGoals = ub.length
         ? ub.reduce((s, b) => s + b.predHome + b.predAway, 0) / ub.length

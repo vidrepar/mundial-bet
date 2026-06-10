@@ -1,15 +1,17 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Lock } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, Lock, MessageCircle, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { MatchComments } from "@/components/match-comments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/user-avatar";
 import { fmtKickoff, timeUntil } from "@/lib/format";
+import { maxPoints } from "@/lib/scoring";
 import { cn } from "@/lib/utils";
 import { useTRPC } from "@/trpc/client";
 
@@ -32,56 +34,69 @@ type MatchRow = {
   betCount: number;
 };
 
-function pointsBadge(points: number | null) {
+function pointsBadge(points: number | null, stage: string) {
   if (points == null) return null;
-  if (points === 3)
-    return <Badge variant="success">+3 exact 🎯</Badge>;
-  if (points === 1) return <Badge variant="warning">+1 outcome</Badge>;
-  return <Badge variant="outline">+0</Badge>;
+  if (points <= 0) return <Badge variant="outline">+0</Badge>;
+  if (points === maxPoints(stage))
+    return <Badge variant="success">🎯 +{points}</Badge>;
+  return <Badge variant="success">+{points}</Badge>;
 }
 
 export function MatchBetCard({
   match,
   signedIn,
-  isAdmin,
+  unread = 0,
 }: {
   match: MatchRow;
   signedIn: boolean;
-  isAdmin: boolean;
+  unread?: number;
 }) {
   const trpc = useTRPC();
   const qc = useQueryClient();
   const [home, setHome] = useState(match.myBet?.predHome?.toString() ?? "");
   const [away, setAway] = useState(match.myBet?.predAway?.toString() ?? "");
-  const [open, setOpen] = useState(false);
+  const [hint, setHint] = useState<"idle" | "saving" | "saved">("idle");
+  const [picksOpen, setPicksOpen] = useState(false);
+  const [resultOpen, setResultOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const place = useMutation(
     trpc.bets.place.mutationOptions({
       onSuccess: () => {
-        toast.success("Bet locked in 🔒");
-        qc.invalidateQueries();
+        setHint("saved");
+        qc.invalidateQueries({ queryKey: trpc.matches.list.queryKey() });
       },
-      onError: (e) => toast.error(e.message),
+      onError: (e) => {
+        setHint("idle");
+        toast.error(e.message);
+      },
     }),
   );
 
-  const picks = useQuery({
-    ...trpc.bets.forMatch.queryOptions({ matchId: match.id }),
-    enabled: open && match.locked,
-  });
-
   const canBet = signedIn && !match.locked;
-  const hasResult = match.finished && match.homeScore != null;
 
-  function save() {
+  /* auto-save the prediction (debounced) once both scores are valid */
+  useEffect(() => {
+    if (!canBet) return;
     const ph = Number.parseInt(home, 10);
     const pa = Number.parseInt(away, 10);
-    if (Number.isNaN(ph) || Number.isNaN(pa)) {
-      toast.error("Enter both scores");
-      return;
-    }
-    place.mutate({ matchId: match.id, predHome: ph, predAway: pa });
-  }
+    if (Number.isNaN(ph) || Number.isNaN(pa)) return;
+    if (match.myBet?.predHome === ph && match.myBet?.predAway === pa) return;
+    setHint("saving");
+    const t = setTimeout(
+      () => place.mutate({ matchId: match.id, predHome: ph, predAway: pa }),
+      700,
+    );
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [home, away, canBet]);
+
+  const picks = useQuery({
+    ...trpc.bets.forMatch.queryOptions({ matchId: match.id }),
+    enabled: picksOpen && match.locked,
+  });
+
+  const hasResult = match.finished && match.homeScore != null;
 
   return (
     <Card className="gap-0 overflow-hidden py-0">
@@ -168,32 +183,61 @@ export function MatchBetCard({
           ) : (
             <span>{match.betCount} picks in</span>
           )}
-          {pointsBadge(match.myBet?.points ?? null)}
+          {pointsBadge(match.myBet?.points ?? null, match.stage)}
+          {canBet && hint !== "idle" && (
+            <span className="text-primary">
+              {hint === "saving" ? "saving…" : "saved ✓"}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {canBet && (
-            <Button size="sm" onClick={save} disabled={place.isPending}>
-              {match.myBet ? "Update" : "Save"}
+        <div className="flex items-center gap-1">
+          <div className="relative">
+            <Button
+              size="icon"
+              variant="ghost"
+              title="Comments"
+              onClick={() => setChatOpen((v) => !v)}
+            >
+              <MessageCircle />
             </Button>
-          )}
+            {unread > 0 && !chatOpen && (
+              <span className="absolute -right-0.5 -top-0.5 flex size-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
+          </div>
           {match.locked && (
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => setOpen((v) => !v)}
+              onClick={() => setPicksOpen((v) => !v)}
             >
               Picks
               <ChevronDown
-                className={cn("transition-transform", open && "rotate-180")}
+                className={cn(
+                  "transition-transform",
+                  picksOpen && "rotate-180",
+                )}
               />
+            </Button>
+          )}
+          {signedIn && match.locked && (
+            <Button
+              size="icon"
+              variant={hasResult ? "ghost" : "secondary"}
+              title="Enter result"
+              className="rounded-full"
+              onClick={() => setResultOpen((v) => !v)}
+            >
+              <Plus />
             </Button>
           )}
         </div>
       </div>
 
       {/* reveal everyone's picks (only once locked) */}
-      {open && match.locked && (
+      {picksOpen && match.locked && (
         <div className="space-y-1 border-t bg-muted/30 px-4 py-3">
           {picks.isLoading && (
             <p className="text-xs text-muted-foreground">Loading picks…</p>
@@ -214,27 +258,27 @@ export function MatchBetCard({
                 <span className="font-medium">
                   {b.predHome}–{b.predAway}
                 </span>
-                {pointsBadge(b.points)}
+                {pointsBadge(b.points, match.stage)}
               </span>
             </div>
           ))}
         </div>
       )}
 
-      {isAdmin && match.locked && (
-        <AdminResult match={match} />
-      )}
+      {resultOpen && signedIn && match.locked && <ResultEntry match={match} />}
+
+      {chatOpen && <MatchComments matchId={match.id} />}
     </Card>
   );
 }
 
-function AdminResult({ match }: { match: MatchRow }) {
+function ResultEntry({ match }: { match: MatchRow }) {
   const trpc = useTRPC();
   const qc = useQueryClient();
   const [h, setH] = useState(match.homeScore?.toString() ?? "");
   const [a, setA] = useState(match.awayScore?.toString() ?? "");
   const setResult = useMutation(
-    trpc.admin.setResult.mutationOptions({
+    trpc.matches.setResult.mutationOptions({
       onSuccess: (r) => {
         toast.success(`Result saved · scored ${r.scored} bets`);
         qc.invalidateQueries();
@@ -243,9 +287,9 @@ function AdminResult({ match }: { match: MatchRow }) {
     }),
   );
   return (
-    <div className="flex items-center justify-end gap-2 border-t border-dashed bg-amber-500/5 px-4 py-2">
-      <span className="mr-auto text-xs font-medium text-amber-500">
-        Admin · result
+    <div className="flex items-center justify-end gap-2 border-t border-dashed bg-primary/5 px-4 py-2">
+      <span className="mr-auto text-xs font-medium text-primary">
+        Final score
       </span>
       <Input
         value={h}
@@ -253,6 +297,7 @@ function AdminResult({ match }: { match: MatchRow }) {
         className="h-8 w-12 text-center"
         placeholder="H"
       />
+      <span className="text-muted-foreground">:</span>
       <Input
         value={a}
         onChange={(e) => setA(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
@@ -261,7 +306,6 @@ function AdminResult({ match }: { match: MatchRow }) {
       />
       <Button
         size="sm"
-        variant="secondary"
         disabled={setResult.isPending}
         onClick={() =>
           setResult.mutate({
@@ -271,7 +315,7 @@ function AdminResult({ match }: { match: MatchRow }) {
           })
         }
       >
-        Save result
+        Save
       </Button>
     </div>
   );
