@@ -2,10 +2,16 @@ import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { bets, matches } from "@/db/schema";
+import { isAdmin } from "@/lib/env";
 import { TrpcError } from "@/lib/errors";
 import { shapeMatch } from "@/lib/match-shape";
 import { scoreBet } from "@/lib/scoring";
-import { baseProcedure, createTRPCRouter, protectedProcedure } from "../init";
+import {
+  adminProcedure,
+  baseProcedure,
+  createTRPCRouter,
+  protectedProcedure,
+} from "../init";
 
 const filterSchema = z
   .enum(["all", "upcoming", "live", "finished", "open"])
@@ -87,9 +93,13 @@ export const matchesRouter = createTRPCRouter({
       return shapeMatch(m, { myBet, betCount: Number(count?.c ?? 0) });
     }),
 
-  /* anyone signed in can enter/fix a result — but only once the match has
-   * kicked off (you can't pre-enter a result). Scores everyone's bets. */
-  setResult: protectedProcedure
+  amAdmin: protectedProcedure.query(({ ctx }) => ({
+    isAdmin: isAdmin(ctx.user.email),
+  })),
+
+  /* ADMIN ONLY: enter the official final result, once the match has kicked
+   * off (you can't pre-enter a result). Scores everyone's bets. */
+  setResult: adminProcedure
     .input(
       z.object({
         matchId: z.number().int(),
@@ -138,7 +148,7 @@ export const matchesRouter = createTRPCRouter({
       return { ok: true, scored: matchBets.length };
     }),
 
-  reopen: protectedProcedure
+  reopen: adminProcedure
     .input(z.object({ matchId: z.number().int() }))
     .mutation(({ input }) => {
       db.update(matches)

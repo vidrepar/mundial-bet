@@ -31,6 +31,11 @@ export default function BetPage() {
     refetchInterval: 30_000,
   });
   const unreadByMatch = unread.data?.byMatch ?? {};
+  const admin = useQuery({
+    ...trpc.matches.amAdmin.queryOptions(),
+    enabled: signedIn,
+  });
+  const isAdmin = !!admin.data?.isAdmin;
 
   /* group matches by calendar day */
   const groups = new Map<string, NonNullable<typeof matches.data>>();
@@ -93,6 +98,7 @@ export default function BetPage() {
               key={m.id}
               match={m}
               signedIn={signedIn}
+              isAdmin={isAdmin}
               unread={unreadByMatch[m.id] ?? 0}
             />
           ))}

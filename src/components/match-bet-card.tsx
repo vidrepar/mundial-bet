@@ -45,10 +45,12 @@ function pointsBadge(points: number | null, stage: string) {
 export function MatchBetCard({
   match,
   signedIn,
+  isAdmin = false,
   unread = 0,
 }: {
   match: MatchRow;
   signedIn: boolean;
+  isAdmin?: boolean;
   unread?: number;
 }) {
   const trpc = useTRPC();
@@ -222,11 +224,11 @@ export function MatchBetCard({
               />
             </Button>
           )}
-          {signedIn && match.locked && (
+          {isAdmin && match.locked && (
             <Button
               size="icon"
               variant={hasResult ? "ghost" : "secondary"}
-              title="Enter result"
+              title="Enter result (admin)"
               className="rounded-full"
               onClick={() => setResultOpen((v) => !v)}
             >
@@ -265,7 +267,7 @@ export function MatchBetCard({
         </div>
       )}
 
-      {resultOpen && signedIn && match.locked && <ResultEntry match={match} />}
+      {resultOpen && isAdmin && match.locked && <ResultEntry match={match} />}
 
       {chatOpen && <MatchComments matchId={match.id} />}
     </Card>
