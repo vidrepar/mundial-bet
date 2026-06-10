@@ -14,6 +14,12 @@ RUN pnpm install --frozen-lockfile
 
 # --- build ---
 FROM base AS build
+# NEXT_PUBLIC_* must exist at build time (Next inlines them). Coolify passes
+# these as --build-arg when marked "Build Variable".
+ARG NEXT_PUBLIC_GOOGLE_ENABLED
+ARG NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_GOOGLE_ENABLED=$NEXT_PUBLIC_GOOGLE_ENABLED
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build
