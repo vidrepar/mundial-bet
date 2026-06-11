@@ -12,6 +12,7 @@ import { useTRPC } from "@/trpc/client";
 
 const FILTERS = [
   { k: "open", label: "Open" },
+  { k: "live", label: "Live" },
   { k: "all", label: "All" },
   { k: "finished", label: "Finished" },
 ] as const;
@@ -23,7 +24,12 @@ export default function BetPage() {
   const { data: session } = useSession();
   const [filter, setFilter] = useState<Filter>("open");
 
-  const matches = useQuery(trpc.matches.list.queryOptions({ filter }));
+  const matches = useQuery({
+    ...trpc.matches.list.queryOptions({ filter }),
+    /* tick scores while anything is live */
+    refetchInterval: (q) =>
+      q.state.data?.some((m) => m.status === "live") ? 30_000 : false,
+  });
   const signedIn = !!session?.user;
   const unread = useQuery({
     ...trpc.comments.unread.queryOptions(),

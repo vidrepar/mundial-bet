@@ -28,6 +28,7 @@ type MatchRow = {
   kickoff: string;
   homeScore: number | null;
   awayScore: number | null;
+  status: string;
   finished: boolean;
   locked: boolean;
   myBet: { predHome: number; predAway: number; points: number | null } | null;
@@ -99,6 +100,7 @@ export function MatchBetCard({
   });
 
   const hasResult = match.finished && match.homeScore != null;
+  const isLive = match.status === "live";
 
   return (
     <Card className="gap-0 overflow-hidden py-0">
@@ -113,7 +115,15 @@ export function MatchBetCard({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {match.locked ? (
+          {isLive ? (
+            <span className="inline-flex items-center gap-1 font-semibold text-red-600">
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-75" />
+                <span className="relative inline-flex size-2 rounded-full bg-red-600" />
+              </span>
+              LIVE
+            </span>
+          ) : match.locked ? (
             <span className="inline-flex items-center gap-1">
               <Lock className="size-3" />
               {hasResult ? "FT" : "Locked"}
@@ -132,9 +142,21 @@ export function MatchBetCard({
         </div>
 
         <div className="flex flex-col items-center gap-1">
-          {hasResult ? (
-            <div className="text-xl font-bold tabular-nums">
-              {match.homeScore} – {match.awayScore}
+          {hasResult || isLive ? (
+            <div className="flex flex-col items-center">
+              <div
+                className={cn(
+                  "text-xl font-bold tabular-nums",
+                  isLive && "text-red-600",
+                )}
+              >
+                {match.homeScore ?? 0} – {match.awayScore ?? 0}
+              </div>
+              {isLive && (
+                <span className="text-[10px] font-semibold text-red-600">
+                  LIVE
+                </span>
+              )}
             </div>
           ) : canBet ? (
             <div className="flex items-center gap-1">

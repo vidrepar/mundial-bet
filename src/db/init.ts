@@ -35,6 +35,20 @@ export function initDatabase() {
       PRIMARY KEY (user_id, match_id)
     )
   `);
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS email_outbox (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      kind text NOT NULL UNIQUE,
+      recipients text NOT NULL,
+      subject text NOT NULL,
+      html text NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL,
+      sent_at integer
+    )
+  `);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS email_outbox_sent_idx ON email_outbox(sent_at)`,
+  );
 
   const res = seedDatabase();
   console.log(

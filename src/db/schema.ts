@@ -157,6 +157,24 @@ export const comments = sqliteTable(
   (t) => [index("comments_match_idx").on(t.matchId)],
 );
 
+/* outbound email queue — producers enqueue pre-rendered HTML, the Apps Script
+ * relay drains it. `kind` is a dedupe key so nothing ever sends twice. */
+export const emailOutbox = sqliteTable(
+  "email_outbox",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    kind: text("kind").notNull().unique(),
+    recipients: text("recipients").notNull(),
+    subject: text("subject").notNull(),
+    html: text("html").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    sentAt: integer("sent_at", { mode: "timestamp" }),
+  },
+  (t) => [index("email_outbox_sent_idx").on(t.sentAt)],
+);
+
 /* per-user last-read marker per match → unread badges + read receipts */
 export const commentReads = sqliteTable(
   "comment_reads",
