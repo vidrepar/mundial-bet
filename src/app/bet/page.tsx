@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { MatchBetCard } from "@/components/match-bet-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,6 +10,7 @@ import { fmtDay } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useTRPC } from "@/trpc/client";
 
+const FILTER_KEYS = ["open", "live", "all", "finished"] as const;
 const FILTERS = [
   { k: "open", label: "Open" },
   { k: "live", label: "Live" },
@@ -17,12 +18,22 @@ const FILTERS = [
   { k: "finished", label: "Finished" },
 ] as const;
 
-type Filter = (typeof FILTERS)[number]["k"];
-
 export default function BetPage() {
   const trpc = useTRPC();
   const { data: session } = useSession();
-  const [filter, setFilter] = useState<Filter>("open");
+
+  /* filter lives in the URL (?filter=live). When absent, default to Live if a
+   * match is on right now, otherwise Open. */
+  const [urlFilter, setUrlFilter] = useQueryState(
+    "filter",
+    parseAsStringLiteral(FILTER_KEYS),
+  );
+  const liveProbe = useQuery({
+    ...trpc.matches.list.queryOptions({ filter: "live" }),
+    refetchInterval: 60_000,
+  });
+  const hasLive = (liveProbe.data?.length ?? 0) > 0;
+  const filter = urlFilter ?? (hasLive ? "live" : "open");
 
   const matches = useQuery({
     ...trpc.matches.list.queryOptions({ filter }),
@@ -61,7 +72,7 @@ export default function BetPage() {
               key={f.k}
               size="sm"
               variant="ghost"
-              onClick={() => setFilter(f.k)}
+              onClick={() => setUrlFilter(f.k)}
               className={cn(
                 "h-7",
                 filter === f.k && "bg-background shadow-sm",

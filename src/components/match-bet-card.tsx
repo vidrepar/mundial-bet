@@ -33,6 +33,7 @@ type MatchRow = {
   locked: boolean;
   myBet: { predHome: number; predAway: number; points: number | null } | null;
   betCount: number;
+  commentCount: number;
 };
 
 function pointsBadge(points: number | null, stage: string) {
@@ -218,12 +219,18 @@ export function MatchBetCard({
         <div className="flex items-center gap-1">
           <div className="relative">
             <Button
-              size="icon"
+              size="sm"
               variant="ghost"
               title="Comments"
+              className="gap-1 px-2"
               onClick={() => setChatOpen((v) => !v)}
             >
               <MessageCircle />
+              {match.commentCount > 0 && (
+                <span className="tabular-nums text-xs">
+                  {match.commentCount}
+                </span>
+              )}
             </Button>
             {unread > 0 && !chatOpen && (
               <span className="absolute -right-0.5 -top-0.5 flex size-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">

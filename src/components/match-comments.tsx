@@ -35,6 +35,8 @@ export function MatchComments({ matchId }: { matchId: number }) {
     qc.invalidateQueries({ queryKey: trpc.comments.list.queryKey({ matchId }) });
     qc.invalidateQueries({ queryKey: trpc.comments.reads.queryKey({ matchId }) });
     qc.invalidateQueries({ queryKey: trpc.comments.unread.queryKey() });
+    /* refresh the per-match comment count on the cards */
+    qc.invalidateQueries({ queryKey: trpc.matches.list.queryKey() });
   };
 
   const markRead = useMutation(

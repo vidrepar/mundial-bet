@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { Nav } from "@/components/nav";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { AppShell } from "@/components/app-shell";
 import { Toaster } from "@/components/ui/sonner";
 import { TRPCReactProvider } from "@/trpc/client";
 import "./globals.css";
@@ -19,10 +20,9 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${inter.className} min-h-screen antialiased`}>
         <TRPCReactProvider>
-          <Nav />
-          <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-24">
-            {children}
-          </main>
+          <NuqsAdapter>
+            <AppShell>{children}</AppShell>
+          </NuqsAdapter>
           <Toaster />
         </TRPCReactProvider>
       </body>

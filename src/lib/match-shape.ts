@@ -4,7 +4,12 @@ import type { Bet, Match } from "@/db/schema.types";
  * Dates become ISO strings + epoch ms; betting lock is computed here. */
 export function shapeMatch(
   m: Match,
-  opts: { myBet?: Bet | null; betCount?: number; nowMs?: number } = {},
+  opts: {
+    myBet?: Bet | null;
+    betCount?: number;
+    commentCount?: number;
+    nowMs?: number;
+  } = {},
 ) {
   const nowMs = opts.nowMs ?? Date.now();
   const kickoffMs = m.kickoffUtc.getTime();
@@ -35,5 +40,6 @@ export function shapeMatch(
         }
       : null,
     betCount: opts.betCount ?? 0,
+    commentCount: opts.commentCount ?? 0,
   };
 }

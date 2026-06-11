@@ -1,7 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { bets, matches } from "@/db/schema";
+import { bets, comments, matches } from "@/db/schema";
 import { isAdmin } from "@/lib/env";
 import { TrpcError } from "@/lib/errors";
 import { shapeMatch } from "@/lib/match-shape";
@@ -37,6 +37,15 @@ export const matchesRouter = createTRPCRouter({
         .all();
       const countMap = new Map(counts.map((r) => [r.matchId, Number(r.c)]));
 
+      const commentCounts = db
+        .select({ matchId: comments.matchId, c: sql<number>`count(*)` })
+        .from(comments)
+        .groupBy(comments.matchId)
+        .all();
+      const commentMap = new Map(
+        commentCounts.map((r) => [r.matchId, Number(r.c)]),
+      );
+
       const myBetMap = new Map<number, (typeof bets.$inferSelect)>();
       if (ctx.user) {
         const mine = db
@@ -51,6 +60,7 @@ export const matchesRouter = createTRPCRouter({
         shapeMatch(m, {
           myBet: myBetMap.get(m.id) ?? null,
           betCount: countMap.get(m.id) ?? 0,
+          commentCount: commentMap.get(m.id) ?? 0,
           nowMs,
         }),
       );
@@ -79,6 +89,11 @@ export const matchesRouter = createTRPCRouter({
         .from(bets)
         .where(eq(bets.matchId, input.id))
         .get();
+      const ccount = db
+        .select({ c: sql<number>`count(*)` })
+        .from(comments)
+        .where(eq(comments.matchId, input.id))
+        .get();
       let myBet = null;
       if (ctx.user) {
         myBet =
@@ -90,7 +105,11 @@ export const matchesRouter = createTRPCRouter({
             )
             .get() ?? null;
       }
-      return shapeMatch(m, { myBet, betCount: Number(count?.c ?? 0) });
+      return shapeMatch(m, {
+        myBet,
+        betCount: Number(count?.c ?? 0),
+        commentCount: Number(ccount?.c ?? 0),
+      });
     }),
 
   amAdmin: protectedProcedure.query(({ ctx }) => ({
