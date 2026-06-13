@@ -2,6 +2,8 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCContext } from "@trpc/tanstack-react-query";
 import { useState } from "react";
@@ -16,6 +18,17 @@ function getQueryClient() {
   if (typeof window === "undefined") return makeQueryClient();
   if (!browserQueryClient) browserQueryClient = makeQueryClient();
   return browserQueryClient;
+}
+
+/* persist the whole query cache to localStorage → instant warm starts +
+ * offline reads. Bumping CACHE_BUSTER invalidates every stored entry. */
+const CACHE_BUSTER = "v1";
+function getPersister() {
+  if (typeof window === "undefined") return null;
+  return createSyncStoragePersister({
+    storage: window.localStorage,
+    key: "mundial-rq-cache",
+  });
 }
 
 function getUrl() {
@@ -35,11 +48,31 @@ export function TRPCReactProvider(
       links: [httpBatchLink({ url: getUrl() })],
     }),
   );
+  const [persister] = useState(getPersister);
+
+  const tree = (
+    <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
+      {props.children}
+    </TRPCProvider>
+  );
+
+  /* SSR / unsupported storage → plain provider; browser → localStorage-backed */
+  if (!persister) {
+    return (
+      <QueryClientProvider client={queryClient}>{tree}</QueryClientProvider>
+    );
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
-        {props.children}
-      </TRPCProvider>
-    </QueryClientProvider>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister,
+        maxAge: 24 * 60 * 60 * 1000,
+        buster: CACHE_BUSTER,
+      }}
+    >
+      {tree}
+    </PersistQueryClientProvider>
   );
 }

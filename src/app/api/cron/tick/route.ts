@@ -1,9 +1,16 @@
 import { eq, gt, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { bets, comments, emailOutbox, matches, user } from "@/db/schema";
+import { bets, comments, emailOutbox, matches, odds, user } from "@/db/schema";
 import { buildCommentDigest, buildResultEmail } from "@/lib/emails";
-import { codeForTeam, espnDateKey, fetchEspnMatches, matchEspnByCodes } from "@/lib/espn";
+import {
+  codeForTeam,
+  espnDateKey,
+  fetchEspnMatches,
+  fetchEspnOdds,
+  matchEspnByCodes,
+} from "@/lib/espn";
+import type { EspnMatch } from "@/lib/espn.types";
 import { enqueueEmail, flushOutbox } from "@/lib/notify";
 import { scoreBet } from "@/lib/scoring";
 
@@ -20,6 +27,12 @@ export const dynamic = "force-dynamic";
 const PRE_MS = 5 * 60_000;
 const MAX_MS = 180 * 60_000;
 const DIGEST_MS = 30 * 60_000;
+
+/* odds polling: price matches up to 36h out, refresh at most every 15 min,
+ * and cap fetches per tick → stays well under any free-tier rate limit. */
+const ODDS_TTL = 15 * 60_000;
+const ODDS_WINDOW = 36 * 60 * 60_000;
+const ODDS_MAX = 10;
 
 async function handle(req: Request) {
   const url = new URL(req.url);
@@ -97,13 +110,87 @@ async function handle(req: Request) {
     }
   }
 
-  /* 3. batched comment digest (~30 min) */
+  /* 3. refresh betting odds (throttled) */
+  const oddsUpdated = await refreshOdds(now);
+
+  /* 4. batched comment digest (~30 min) */
   const digests = maybeQueueCommentDigests(now);
 
-  /* 4. push the queue to the Gmail relay */
+  /* 5. push the queue to the Gmail relay */
   const sent = await flushOutbox();
 
-  return NextResponse.json({ ok: true, live, updated, finishedNow, digests, sent });
+  return NextResponse.json({
+    ok: true,
+    live,
+    updated,
+    finishedNow,
+    oddsUpdated,
+    digests,
+    sent,
+  });
+}
+
+/* Poll ESPN's free odds feed for soon/live matches and cache decimal odds. */
+async function refreshOdds(now: number): Promise<number> {
+  /* 1. matches worth pricing: not finished, kickoff within the window */
+  const upcoming = db
+    .select()
+    .from(matches)
+    .where(eq(matches.finished, false))
+    .all()
+    .filter((m) => m.kickoffUtc.getTime() <= now + ODDS_WINDOW)
+    .sort((a, b) => a.kickoffUtc.getTime() - b.kickoffUtc.getTime());
+
+  /* 2. drop ones priced within the TTL, cap how many we fetch this tick */
+  const fresh = new Map(
+    db
+      .select()
+      .from(odds)
+      .all()
+      .map((o) => [o.matchId, o.updatedAt.getTime()]),
+  );
+  const stale = upcoming
+    .filter((m) => now - (fresh.get(m.id) ?? 0) > ODDS_TTL)
+    .slice(0, ODDS_MAX);
+  if (!stale.length) return 0;
+
+  /* 3. one scoreboard fetch per unique ESPN date → resolves event ids */
+  const keys = [...new Set(stale.map((m) => espnDateKey(m.kickoffUtc)))];
+  const byKey = new Map<string, EspnMatch[]>();
+  await Promise.all(
+    keys.map(async (k) =>
+      byKey.set(k, await fetchEspnMatches(k).catch(() => [])),
+    ),
+  );
+
+  /* 4. match → event id → 3-way odds → upsert */
+  let updated = 0;
+  for (const m of stale) {
+    const list = byKey.get(espnDateKey(m.kickoffUtc)) ?? [];
+    const found = matchEspnByCodes(
+      list,
+      codeForTeam(m.homeTeam),
+      codeForTeam(m.awayTeam),
+    );
+    if (!found?.ev.id) continue;
+    const o = await fetchEspnOdds(found.ev.id);
+    if (!o) continue;
+    const homeDec = found.swapped ? o.awayDec : o.homeDec;
+    const awayDec = found.swapped ? o.homeDec : o.awayDec;
+    const row = {
+      provider: o.provider,
+      homeDec,
+      drawDec: o.drawDec,
+      awayDec,
+      updatedAt: new Date(now),
+    };
+    db.insert(odds)
+      .values({ matchId: m.id, ...row })
+      .onConflictDoUpdate({ target: odds.matchId, set: row })
+      .run();
+    updated++;
+  }
+  return updated;
 }
 
 function maybeQueueCommentDigests(now: number): number {

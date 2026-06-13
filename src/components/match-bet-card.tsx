@@ -34,6 +34,7 @@ type MatchRow = {
   myBet: { predHome: number; predAway: number; points: number | null } | null;
   betCount: number;
   commentCount: number;
+  odds: { provider: string; home: number; draw: number; away: number } | null;
 };
 
 function pointsBadge(points: number | null, stage: string) {
@@ -195,6 +196,11 @@ export function MatchBetCard({
         </div>
       </div>
 
+      {/* live betting odds (ESPN) — hidden once the match is final */}
+      {match.odds && !match.finished && (
+        <OddsRow match={match} odds={match.odds} />
+      )}
+
       {/* action row */}
       <div className="flex items-center justify-between gap-2 border-t px-4 py-2">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -300,6 +306,42 @@ export function MatchBetCard({
 
       {chatOpen && <MatchComments matchId={match.id} />}
     </Card>
+  );
+}
+
+function OddsRow({
+  match,
+  odds,
+}: {
+  match: MatchRow;
+  odds: NonNullable<MatchRow["odds"]>;
+}) {
+  const fav = Math.min(odds.home, odds.draw, odds.away);
+  const cells = [
+    { key: "home", label: match.homeFlag, val: odds.home },
+    { key: "draw", label: "Draw", val: odds.draw },
+    { key: "away", label: match.awayFlag, val: odds.away },
+  ];
+  return (
+    <div className="flex items-center gap-1.5 border-t bg-muted/20 px-4 py-2">
+      <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        Odds
+      </span>
+      {cells.map((c) => (
+        <div
+          key={c.key}
+          className={cn(
+            "flex flex-1 items-center justify-between gap-1 rounded-md border px-2 py-1 text-xs",
+            c.val === fav
+              ? "border-primary/40 bg-primary/10 text-foreground"
+              : "text-muted-foreground",
+          )}
+        >
+          <span className="truncate">{c.label}</span>
+          <span className="font-semibold tabular-nums">{c.val.toFixed(2)}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

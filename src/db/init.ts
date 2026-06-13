@@ -50,6 +50,47 @@ export function initDatabase() {
     sql`CREATE INDEX IF NOT EXISTS email_outbox_sent_idx ON email_outbox(sent_at)`,
   );
 
+  /* threaded comments: add parent_id once (SQLite has no ADD COLUMN IF NOT
+   * EXISTS, so probe the table first). Replies reference a parent comment. */
+  const cols = db
+    .all<{ name: string }>(sql`PRAGMA table_info(comments)`)
+    .map((c) => c.name);
+  if (!cols.includes("parent_id")) {
+    db.run(
+      sql`ALTER TABLE comments ADD COLUMN parent_id integer REFERENCES comments(id) ON DELETE CASCADE`,
+    );
+  }
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS comments_parent_idx ON comments(parent_id)`,
+  );
+
+  /* emoji reactions on comments */
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS comment_reactions (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      comment_id integer NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+      user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      emoji text NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL,
+      UNIQUE(comment_id, user_id, emoji)
+    )
+  `);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS comment_reactions_comment_idx ON comment_reactions(comment_id)`,
+  );
+
+  /* betting odds cache (polled from ESPN) */
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS odds (
+      match_id integer PRIMARY KEY REFERENCES matches(id) ON DELETE CASCADE,
+      provider text NOT NULL,
+      home_dec real NOT NULL,
+      draw_dec real NOT NULL,
+      away_dec real NOT NULL,
+      updated_at integer NOT NULL
+    )
+  `);
+
   const res = seedDatabase();
   console.log(
     `[db] ready · ${res.teams} teams · +${res.matchesInserted} matches`,

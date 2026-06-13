@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnySQLiteColumn,
   index,
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
   unique,
@@ -149,13 +151,57 @@ export const comments = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    /* null = top-level; otherwise points at the parent comment (max 2 levels) */
+    parentId: integer("parent_id").references(
+      (): AnySQLiteColumn => comments.id,
+      { onDelete: "cascade" },
+    ),
     body: text("body").notNull(),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
   },
-  (t) => [index("comments_match_idx").on(t.matchId)],
+  (t) => [
+    index("comments_match_idx").on(t.matchId),
+    index("comments_parent_idx").on(t.parentId),
+  ],
 );
+
+/* emoji reactions on comments — one row per (comment, user, emoji) so a tap
+ * toggles. Powers thread-style reaction counts. */
+export const commentReactions = sqliteTable(
+  "comment_reactions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    commentId: integer("comment_id")
+      .notNull()
+      .references(() => comments.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    unique("comment_reactions_uq").on(t.commentId, t.userId, t.emoji),
+    index("comment_reactions_comment_idx").on(t.commentId),
+  ],
+);
+
+/* latest betting odds per match, polled from ESPN's free no-auth odds feed.
+ * Decimal odds (home/draw/away); refreshed on a throttle by the cron tick. */
+export const odds = sqliteTable("odds", {
+  matchId: integer("match_id")
+    .primaryKey()
+    .references(() => matches.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  homeDec: real("home_dec").notNull(),
+  drawDec: real("draw_dec").notNull(),
+  awayDec: real("away_dec").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
 
 /* outbound email queue — producers enqueue pre-rendered HTML, the Apps Script
  * relay drains it. `kind` is a dedupe key so nothing ever sends twice. */

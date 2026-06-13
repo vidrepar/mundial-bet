@@ -1,7 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { bets, comments, matches } from "@/db/schema";
+import { bets, comments, matches, odds } from "@/db/schema";
 import { isAdmin } from "@/lib/env";
 import { TrpcError } from "@/lib/errors";
 import { shapeMatch } from "@/lib/match-shape";
@@ -46,6 +46,14 @@ export const matchesRouter = createTRPCRouter({
         commentCounts.map((r) => [r.matchId, Number(r.c)]),
       );
 
+      const oddsMap = new Map(
+        db
+          .select()
+          .from(odds)
+          .all()
+          .map((o) => [o.matchId, o]),
+      );
+
       const myBetMap = new Map<number, (typeof bets.$inferSelect)>();
       if (ctx.user) {
         const mine = db
@@ -61,6 +69,7 @@ export const matchesRouter = createTRPCRouter({
           myBet: myBetMap.get(m.id) ?? null,
           betCount: countMap.get(m.id) ?? 0,
           commentCount: commentMap.get(m.id) ?? 0,
+          odds: oddsMap.get(m.id) ?? null,
           nowMs,
         }),
       );
@@ -73,7 +82,8 @@ export const matchesRouter = createTRPCRouter({
         case "live":
           return shaped.filter((m) => !m.finished && m.kickoffMs <= nowMs);
         case "finished":
-          return shaped.filter((m) => m.finished);
+          /* latest matches first */
+          return shaped.filter((m) => m.finished).reverse();
         default:
           return shaped;
       }
@@ -105,10 +115,13 @@ export const matchesRouter = createTRPCRouter({
             )
             .get() ?? null;
       }
+      const oddsRow =
+        db.select().from(odds).where(eq(odds.matchId, input.id)).get() ?? null;
       return shapeMatch(m, {
         myBet,
         betCount: Number(count?.c ?? 0),
         commentCount: Number(ccount?.c ?? 0),
+        odds: oddsRow,
       });
     }),
 

@@ -1,4 +1,4 @@
-import type { Bet, Match } from "@/db/schema.types";
+import type { Bet, Match, Odds } from "@/db/schema.types";
 
 /* turn a DB match row into a JSON-safe object the client can consume.
  * Dates become ISO strings + epoch ms; betting lock is computed here. */
@@ -8,6 +8,7 @@ export function shapeMatch(
     myBet?: Bet | null;
     betCount?: number;
     commentCount?: number;
+    odds?: Odds | null;
     nowMs?: number;
   } = {},
 ) {
@@ -41,5 +42,13 @@ export function shapeMatch(
       : null,
     betCount: opts.betCount ?? 0,
     commentCount: opts.commentCount ?? 0,
+    odds: opts.odds
+      ? {
+          provider: opts.odds.provider,
+          home: opts.odds.homeDec,
+          draw: opts.odds.drawDec,
+          away: opts.odds.awayDec,
+        }
+      : null,
   };
 }
