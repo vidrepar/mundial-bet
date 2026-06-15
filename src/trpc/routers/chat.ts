@@ -54,6 +54,15 @@ export const chatRouter = createTRPCRouter({
     };
   }),
 
+  /* group members → @mention autocomplete */
+  members: protectedProcedure.query(() =>
+    db
+      .select({ id: user.id, name: user.name, image: user.image })
+      .from(user)
+      .orderBy(asc(user.name))
+      .all(),
+  ),
+
   send: protectedProcedure
     .input(z.object({ body: z.string().trim().min(1).max(1000) }))
     .mutation(({ ctx, input }) => {

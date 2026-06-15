@@ -26,8 +26,11 @@ import type { AppRouter } from "@/trpc/routers/_app.types";
 type ChatData = inferRouterOutputs<AppRouter>["chat"]["list"];
 type ChatMsg = ChatData["messages"][number];
 type ChipMatch = ChatData["matches"][number];
+type Member = inferRouterOutputs<AppRouter>["chat"]["members"][number];
 
 const REF_RE = /#(\d+)/g;
+/* the partial handle being typed after an "@" (letters/digits, no space) */
+const MENTION_RE = /@([\p{L}\p{N}_]*)$/u;
 
 function dayKey(iso: string): string {
   return new Date(iso).toDateString();
@@ -92,6 +95,7 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
 
   const [text, setText] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<{
     msgId: number;
     match: ChipMatch;
@@ -103,6 +107,8 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
     ...trpc.chat.list.queryOptions(),
     refetchInterval: 5_000,
   });
+  const members = useQuery(trpc.chat.members.queryOptions());
+  const meName = session?.user?.name ?? "";
 
   const markRead = useMutation(
     trpc.chat.markRead.mutationOptions({
@@ -142,6 +148,26 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
     setPickerOpen(false);
     inputRef.current?.focus();
   }
+  /* @mention autocomplete: track the partial handle being typed at the caret */
+  function onComposerChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value.slice(0, 1000);
+    setText(val);
+    const caret = e.target.selectionStart ?? val.length;
+    const mm = MENTION_RE.exec(val.slice(0, caret));
+    setMentionQuery(mm ? mm[1].toLowerCase() : null);
+  }
+  function pickMention(member: Member) {
+    const el = inputRef.current;
+    const caret = el?.selectionStart ?? text.length;
+    const before = text.slice(0, caret).replace(MENTION_RE, `@${member.name} `);
+    const next = before + text.slice(caret);
+    setText(next);
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(before.length, before.length);
+    });
+  }
   /* tap a match chip → expand its comment thread inline, right in the chat */
   function toggleThread(msgId: number, m: ChipMatch) {
     setExpanded((cur) =>
@@ -154,6 +180,15 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
     onClose();
     router.push(`/bet?m=${m.matchNumber}`);
   }
+
+  const memberList = members.data ?? [];
+  const mentionCandidates =
+    mentionQuery === null
+      ? []
+      : memberList
+          .filter((u) => u.id !== me)
+          .filter((u) => u.name.toLowerCase().includes(mentionQuery))
+          .slice(0, 6);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background sm:inset-auto sm:bottom-4 sm:right-4 sm:h-[70vh] sm:max-h-[680px] sm:w-[400px] sm:rounded-2xl sm:border sm:shadow-2xl">
@@ -205,6 +240,8 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
                 mine={mine}
                 startRun={startRun}
                 matches={matchLookup}
+                members={memberList}
+                meName={meName}
                 onChip={(match) => toggleThread(m.id, match)}
               />
               {expanded?.msgId === m.id && (
@@ -224,6 +261,23 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
         <MatchPicker onPick={insertRef} onClose={() => setPickerOpen(false)} />
       )}
 
+      {/* @mention autocomplete */}
+      {mentionCandidates.length > 0 && (
+        <div className="border-t bg-popover px-2 py-1">
+          {mentionCandidates.map((u) => (
+            <button
+              key={u.id}
+              type="button"
+              onClick={() => pickMention(u)}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            >
+              <UserAvatar name={u.name} image={u.image} className="size-6" />
+              <span className="truncate">{u.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* composer */}
       <div className="flex items-center gap-2 border-t px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <Button
@@ -238,11 +292,22 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
         <Input
           ref={inputRef}
           value={text}
-          onChange={(e) => setText(e.target.value.slice(0, 1000))}
+          onChange={onComposerChange}
           onKeyDown={(e) => {
+            if (mentionCandidates.length > 0) {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                pickMention(mentionCandidates[0]);
+                return;
+              }
+              if (e.key === "Escape") {
+                setMentionQuery(null);
+                return;
+              }
+            }
             if (e.key === "Enter") submit();
           }}
-          placeholder="Message the group…"
+          placeholder="Message the group…  @ to tag, # for a match"
           className="h-10"
         />
         <Button
@@ -313,14 +378,19 @@ function MessageRow({
   mine,
   startRun,
   matches,
+  members,
+  meName,
   onChip,
 }: {
   m: ChatMsg;
   mine: boolean;
   startRun: boolean;
   matches: Record<number, ChipMatch>;
+  members: Member[];
+  meName: string;
   onChip: (m: ChipMatch) => void;
 }) {
+  const mentionsMe = !!meName && m.body.includes(`@${meName}`);
   return (
     <div className={cn("flex gap-2", mine ? "justify-end" : "justify-start")}>
       {!mine && (
@@ -336,13 +406,14 @@ function MessageRow({
           mine
             ? "rounded-br-sm bg-primary text-primary-foreground"
             : "rounded-bl-sm bg-muted",
+          !mine && mentionsMe && "ring-2 ring-amber-400/60",
         )}
       >
         {!mine && startRun && (
           <p className="mb-0.5 text-xs font-semibold text-primary">{m.name}</p>
         )}
         <p className="whitespace-pre-wrap break-words">
-          {renderBody(m.body, matches, onChip)}
+          {renderBody(m.body, matches, members, meName, onChip)}
         </p>
         <span
           className={cn(
@@ -357,29 +428,70 @@ function MessageRow({
   );
 }
 
-/* split a body into text + inline match chips on #<matchNumber> tokens */
+/* tokenize a body into text + inline #<match> chips + @mention chips */
 function renderBody(
   body: string,
   matches: Record<number, ChipMatch>,
+  members: Member[],
+  meName: string,
   onChip: (m: ChipMatch) => void,
 ) {
+  /* longest names first so "@Vid Repar" wins over "@Vid" */
+  const names = [...members].sort((a, b) => b.name.length - a.name.length);
   const out: React.ReactNode[] = [];
-  let last = 0;
+  let buf = "";
   let key = 0;
-  for (const tok of body.matchAll(REF_RE)) {
-    const idx = tok.index ?? 0;
-    if (idx > last) out.push(<span key={key++}>{body.slice(last, idx)}</span>);
-    const num = Number(tok[1]);
-    const match = matches[num];
-    if (match) {
-      out.push(<MatchChip key={key++} m={match} onClick={() => onChip(match)} />);
-    } else {
-      out.push(<span key={key++}>{tok[0]}</span>);
+  const flush = () => {
+    if (buf) {
+      out.push(<span key={key++}>{buf}</span>);
+      buf = "";
     }
-    last = idx + tok[0].length;
+  };
+  let i = 0;
+  while (i < body.length) {
+    const ch = body[i];
+    if (ch === "#") {
+      const mm = /^#(\d+)/.exec(body.slice(i));
+      const match = mm ? matches[Number(mm[1])] : undefined;
+      if (mm && match) {
+        flush();
+        out.push(
+          <MatchChip key={key++} m={match} onClick={() => onChip(match)} />,
+        );
+        i += mm[0].length;
+        continue;
+      }
+    }
+    if (ch === "@") {
+      const rest = body.slice(i + 1).toLowerCase();
+      const hit = names.find((u) => rest.startsWith(u.name.toLowerCase()));
+      if (hit) {
+        flush();
+        out.push(
+          <MentionChip key={key++} name={hit.name} me={hit.name === meName} />,
+        );
+        i += 1 + hit.name.length;
+        continue;
+      }
+    }
+    buf += ch;
+    i++;
   }
-  if (last < body.length) out.push(<span key={key++}>{body.slice(last)}</span>);
+  flush();
   return out;
+}
+
+function MentionChip({ name, me }: { name: string; me: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded px-1 font-semibold",
+        me ? "bg-amber-400/25 text-amber-300" : "bg-primary/15 text-primary",
+      )}
+    >
+      @{name}
+    </span>
+  );
 }
 
 function MatchChip({ m, onClick }: { m: ChipMatch; onClick: () => void }) {
