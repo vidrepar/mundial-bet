@@ -24,9 +24,9 @@ export function PrivateNotes() {
           onClick={() => setPanel("notes", { history: "push" })}
           aria-label="Private notes"
           title="Private notes"
-          className="fixed bottom-5 right-20 z-50 flex size-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 transition-transform hover:scale-105 active:scale-95"
+          className="fixed bottom-5 right-20 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-black shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95"
         >
-          <NotebookPen className="size-6" />
+          <NotebookPen className="size-6 text-black" />
         </button>
       )}
       {panel === "notes" && (

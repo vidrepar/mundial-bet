@@ -638,7 +638,10 @@ function renderBody(body: string, members: Member[], meName: string) {
         out.push(
           <span
             key={key++}
-            className={cn("rounded px-1 font-semibold", hit.name === meName ? "bg-amber-400/25 text-amber-300" : "bg-primary/15 text-primary")}
+            className={cn(
+              "rounded px-1 font-bold text-white",
+              hit.name === meName ? "bg-amber-500/40" : "bg-white/20",
+            )}
           >
             @{hit.name}
           </span>,
