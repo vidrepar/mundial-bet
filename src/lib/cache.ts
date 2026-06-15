@@ -12,17 +12,25 @@ let tried = false;
 function getRedis(): Redis | null {
   if (tried) return redis;
   tried = true;
-  const url = process.env.REDIS_URL;
-  if (!url) return null;
-  const client = new Redis(url, {
-    maxRetriesPerRequest: 2,
-    enableOfflineQueue: false,
-    lazyConnect: false,
-  });
-  client.on("error", () => {
+  /* prefer discrete host/port/password — Coolify's password has URL-unsafe
+   * chars, so a redis:// URL string fails to parse */
+  const opts = { maxRetriesPerRequest: 2, enableOfflineQueue: false, lazyConnect: false };
+  const host = process.env.REDIS_HOST;
+  if (host) {
+    redis = new Redis({
+      host,
+      port: Number(process.env.REDIS_PORT ?? 6379),
+      password: process.env.REDIS_PASSWORD,
+      ...opts,
+    });
+  } else if (process.env.REDIS_URL) {
+    redis = new Redis(process.env.REDIS_URL, opts);
+  } else {
+    return null;
+  }
+  redis.on("error", () => {
     /* swallow — requests fall back to the in-memory map */
   });
-  redis = client;
   return redis;
 }
 
