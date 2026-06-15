@@ -129,7 +129,7 @@ export const matchesRouter = createTRPCRouter({
   /* cheap, user-independent "is anything live?" → cached in Redis (≈8s) so the
    * landing redirect to the Live tab is instant and doesn't recompute per load */
   hasLive: baseProcedure.query(() =>
-    cached("matches:hasLive", 8000, () => {
+    cached("matches:hasLive", 30_000, () => {
       const live = db
         .select({ id: matches.id, status: matches.status, finished: matches.finished })
         .from(matches)
