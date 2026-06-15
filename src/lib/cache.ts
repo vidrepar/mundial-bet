@@ -14,7 +14,9 @@ function getRedis(): Redis | null {
   tried = true;
   /* prefer discrete host/port/password — Coolify's password has URL-unsafe
    * chars, so a redis:// URL string fails to parse */
-  const opts = { maxRetriesPerRequest: 2, enableOfflineQueue: false, lazyConnect: false };
+  /* queue commands until the connection is ready so the very first write lands
+   * in Redis; maxRetriesPerRequest still bounds failure if Redis is truly down */
+  const opts = { maxRetriesPerRequest: 2, enableOfflineQueue: true, lazyConnect: false };
   const host = process.env.REDIS_HOST;
   if (host) {
     redis = new Redis({
