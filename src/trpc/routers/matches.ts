@@ -85,8 +85,14 @@ export const matchesRouter = createTRPCRouter({
         case "finished":
           /* latest matches first */
           return shaped.filter((m) => m.finished).reverse();
-        default:
-          return shaped;
+        default: {
+          /* "all": live first, then upcoming (soonest), then finished (newest) —
+           * so the landing view surfaces live matches without a probe/redirect */
+          const live = shaped.filter((m) => m.status === "live" && !m.finished);
+          const upcoming = shaped.filter((m) => !m.finished && m.status !== "live");
+          const finished = shaped.filter((m) => m.finished).reverse();
+          return [...live, ...upcoming, ...finished];
+        }
       }
     }),
 

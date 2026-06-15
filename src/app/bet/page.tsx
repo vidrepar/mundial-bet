@@ -22,21 +22,15 @@ export default function BetPage() {
   const trpc = useTRPC();
   const { data: session } = useSession();
 
-  /* filter lives in the URL (?filter=live). When absent, default to Live if a
-   * match is on right now, otherwise Open. */
+  /* filter lives in the URL (?filter=…). Default to "All", which already lists
+   * live → upcoming → finished, so no probe/redirect is needed on load. */
   const [urlFilter, setUrlFilter] = useQueryState(
     "filter",
     parseAsStringLiteral(FILTER_KEYS),
   );
   /* deep-link target from the group chat: ?m=<matchNumber> */
   const [refMatch] = useQueryState("m", parseAsInteger);
-  const liveProbe = useQuery({
-    ...trpc.matches.hasLive.queryOptions(),
-    refetchInterval: 60_000,
-  });
-  const hasLive = liveProbe.data?.hasLive ?? false;
-  /* a referenced match must be visible regardless of the active tab */
-  const filter = refMatch ? "all" : (urlFilter ?? (hasLive ? "live" : "open"));
+  const filter = refMatch ? "all" : (urlFilter ?? "all");
 
   const matches = useQuery({
     ...trpc.matches.list.queryOptions({ filter }),
@@ -57,12 +51,35 @@ export default function BetPage() {
   });
   const isAdmin = !!admin.data?.isAdmin;
 
-  /* group matches by calendar day */
-  const groups = new Map<string, NonNullable<typeof matches.data>>();
-  for (const m of matches.data ?? []) {
-    const key = fmtDay(m.kickoff);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(m);
+  const all = matches.data ?? [];
+  const card = (m: NonNullable<typeof matches.data>[number]) => (
+    <MatchBetCard
+      key={m.id}
+      match={m}
+      signedIn={signedIn}
+      isAdmin={isAdmin}
+      unread={unreadByMatch[m.id] ?? 0}
+      autoOpenComments={refMatch === m.matchNumber}
+    />
+  );
+
+  /* "All": status sections (live → upcoming → finished). Otherwise: by day. */
+  const sections =
+    filter === "all"
+      ? [
+          { key: "live", label: "🔴 Live", items: all.filter((m) => m.status === "live" && !m.finished) },
+          { key: "upcoming", label: "Upcoming", items: all.filter((m) => !m.finished && m.status !== "live") },
+          { key: "finished", label: "Finished", items: all.filter((m) => m.finished) },
+        ].filter((s) => s.items.length > 0)
+      : null;
+
+  const dayGroups = new Map<string, NonNullable<typeof matches.data>>();
+  if (!sections) {
+    for (const m of all) {
+      const key = fmtDay(m.kickoff);
+      if (!dayGroups.has(key)) dayGroups.set(key, []);
+      dayGroups.get(key)!.push(m);
+    }
   }
 
   return (
@@ -108,23 +125,24 @@ export default function BetPage() {
         </p>
       )}
 
-      {[...groups.entries()].map(([day, ms]) => (
-        <section key={day} className="space-y-3">
+      {sections?.map((s) => (
+        <section key={s.key} className="space-y-3">
           <h2 className="sticky top-14 z-10 -mx-1 bg-background/80 px-1 py-1 text-sm font-semibold text-muted-foreground backdrop-blur">
-            {day}
+            {s.label}
           </h2>
-          {ms.map((m) => (
-            <MatchBetCard
-              key={m.id}
-              match={m}
-              signedIn={signedIn}
-              isAdmin={isAdmin}
-              unread={unreadByMatch[m.id] ?? 0}
-              autoOpenComments={refMatch === m.matchNumber}
-            />
-          ))}
+          {s.items.map(card)}
         </section>
       ))}
+
+      {!sections &&
+        [...dayGroups.entries()].map(([day, ms]) => (
+          <section key={day} className="space-y-3">
+            <h2 className="sticky top-14 z-10 -mx-1 bg-background/80 px-1 py-1 text-sm font-semibold text-muted-foreground backdrop-blur">
+              {day}
+            </h2>
+            {ms.map(card)}
+          </section>
+        ))}
     </div>
   );
 }
