@@ -9,6 +9,7 @@ import { useTRPC } from "@/trpc/client";
 export default function AnalyticsPage() {
   const trpc = useTRPC();
   const q = useQuery(trpc.analytics.summary.queryOptions());
+  const bb = useQuery(trpc.analytics.beatTheBookie.queryOptions());
   const d = q.data;
 
   const maxGoals = Math.max(1, ...(d?.goals.map((g) => g.avgGoals) ?? [1]));
@@ -181,6 +182,37 @@ export default function AnalyticsPage() {
                   <span className="text-muted-foreground">
                     {b.line}{" "}
                     <span className="text-xs">({b.stage})</span>
+                  </span>
+                </div>
+              ))
+            ) : (
+              <Empty />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* beat the bookie */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Beat the bookie 🤖</CardTitle>
+            <CardDescription>
+              Correct calls against the market favourite (upsets) vs with it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {bb.data?.length ? (
+              bb.data.map((r) => (
+                <div
+                  key={r.userId}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="flex items-center gap-2">
+                    <UserAvatar name={r.name} image={r.image} className="size-5" />
+                    {r.name}
+                  </span>
+                  <span className="flex gap-2">
+                    <Badge variant="success">🐐 {r.upsets} upsets</Badge>
+                    <Badge variant="secondary">{r.withMarket} w/ market</Badge>
                   </span>
                 </div>
               ))

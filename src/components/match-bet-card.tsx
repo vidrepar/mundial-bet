@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/user-avatar";
 import { fmtKickoff, timeUntil } from "@/lib/format";
-import { maxPoints } from "@/lib/scoring";
+import { maxPoints, scoreBet } from "@/lib/scoring";
 import { cn } from "@/lib/utils";
 import { useTRPC } from "@/trpc/client";
 
@@ -116,6 +116,18 @@ export function MatchBetCard({
 
   const hasResult = match.finished && match.homeScore != null;
   const isLive = match.status === "live";
+  /* provisional points if the live score stood — turns live matches into a race */
+  const liveScoring = isLive && match.homeScore != null;
+  const provFor = (ph: number, pa: number) =>
+    scoreBet(ph, pa, match.homeScore ?? 0, match.awayScore ?? 0, match.stage);
+  const myLive =
+    liveScoring && match.myBet
+      ? provFor(match.myBet.predHome, match.myBet.predAway)
+      : null;
+  const maxProv =
+    liveScoring && picks.data?.bets.length
+      ? Math.max(...picks.data.bets.map((b) => provFor(b.predHome, b.predAway)))
+      : 0;
 
   return (
     <Card id={`match-${match.id}`} className="gap-0 overflow-hidden py-0">
@@ -231,6 +243,11 @@ export function MatchBetCard({
             <span>{match.betCount} picks in</span>
           )}
           {pointsBadge(match.myBet?.points ?? null, match.stage)}
+          {myLive != null && (
+            <Badge variant="secondary" className="animate-pulse">
+              ⚡ {myLive > 0 ? `+${myLive}` : "+0"} live
+            </Badge>
+          )}
           {canBet && hint !== "idle" && (
             <span className="text-primary">
               {hint === "saving" ? "saving…" : "saved ✓"}
@@ -298,23 +315,34 @@ export function MatchBetCard({
           {picks.data?.bets.length === 0 && (
             <p className="text-xs text-muted-foreground">No picks made.</p>
           )}
-          {picks.data?.bets.map((b) => (
-            <div
-              key={b.userId}
-              className="flex items-center justify-between text-sm"
-            >
-              <span className="flex items-center gap-2">
-                <UserAvatar name={b.name} image={b.image} className="size-5" />
-                {b.name}
-              </span>
-              <span className="flex items-center gap-2 tabular-nums">
-                <span className="font-medium">
-                  {b.predHome}–{b.predAway}
+          {picks.data?.bets.map((b) => {
+            const prov = liveScoring ? provFor(b.predHome, b.predAway) : null;
+            const isLeader = prov != null && prov > 0 && prov === maxProv;
+            return (
+              <div
+                key={b.userId}
+                className="flex items-center justify-between text-sm"
+              >
+                <span className="flex items-center gap-2">
+                  <UserAvatar name={b.name} image={b.image} className="size-5" />
+                  {isLeader && <span title="Leading this match">👑</span>}
+                  {b.name}
                 </span>
-                {pointsBadge(b.points, match.stage)}
-              </span>
-            </div>
-          ))}
+                <span className="flex items-center gap-2 tabular-nums">
+                  <span className="font-medium">
+                    {b.predHome}–{b.predAway}
+                  </span>
+                  {prov != null ? (
+                    <Badge variant={isLeader ? "success" : "secondary"}>
+                      ⚡ {prov > 0 ? `+${prov}` : "+0"}
+                    </Badge>
+                  ) : (
+                    pointsBadge(b.points, match.stage)
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 

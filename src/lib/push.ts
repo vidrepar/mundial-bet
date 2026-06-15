@@ -32,19 +32,13 @@ function statusOf(err: unknown): number {
   return 0;
 }
 
-/* fan a notification out to every subscription except the actor's; prune any
- * subscriptions the push service reports as gone (404/410). */
-export async function notifyUsers(
-  excludeUserId: string,
+async function send(
+  subs: (typeof pushSubscriptions.$inferSelect)[],
   payload: PushPayload,
-): Promise<void> {
-  if (!ensureConfigured()) return;
-  const subs = db
-    .select()
-    .from(pushSubscriptions)
-    .all()
-    .filter((s) => s.userId !== excludeUserId);
+): Promise<number> {
+  if (!ensureConfigured()) return 0;
   const body = JSON.stringify(payload);
+  let sent = 0;
   await Promise.all(
     subs.map(async (s) => {
       try {
@@ -52,6 +46,7 @@ export async function notifyUsers(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           body,
         );
+        sent++;
       } catch (err) {
         const code = statusOf(err);
         if (code === 404 || code === 410) {
@@ -62,4 +57,25 @@ export async function notifyUsers(
       }
     }),
   );
+  return sent;
+}
+
+/* fan a notification out to every subscription except the actor's */
+export async function notifyUsers(excludeUserId: string, payload: PushPayload): Promise<void> {
+  const subs = db
+    .select()
+    .from(pushSubscriptions)
+    .all()
+    .filter((s) => s.userId !== excludeUserId);
+  await send(subs, payload);
+}
+
+/* notify a single user across their devices; returns how many were delivered */
+export async function notifyUser(userId: string, payload: PushPayload): Promise<number> {
+  const subs = db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, userId))
+    .all();
+  return send(subs, payload);
 }

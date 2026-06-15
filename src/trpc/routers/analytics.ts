@@ -1,6 +1,7 @@
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { bets, matches, user } from "@/db/schema";
-import { isExactScore } from "@/lib/scoring";
+import { bets, matches, odds, user } from "@/db/schema";
+import { isExactScore, outcome } from "@/lib/scoring";
 import { baseProcedure, createTRPCRouter } from "../init";
 
 export const analyticsRouter = createTRPCRouter({
@@ -109,5 +110,48 @@ export const analyticsRouter = createTRPCRouter({
     const favScoreline = top ? { score: top[0], count: top[1] } : null;
 
     return { goals, clutch, bestCalls, headToHead, favScoreline };
+  }),
+
+  /* "beat the bookie": correct outcome calls, split by whether they went WITH
+   * the market favourite or AGAINST it (an upset the bookie missed) */
+  beatTheBookie: baseProcedure.query(() => {
+    const users = db.select().from(user).all();
+    const allBets = db.select().from(bets).all();
+    const finished = db.select().from(matches).where(eq(matches.finished, true)).all();
+    const mById = new Map(finished.map((m) => [m.id, m]));
+    const oddsById = new Map(db.select().from(odds).all().map((o) => [o.matchId, o]));
+
+    const favOf = (o: { homeDec: number; drawDec: number; awayDec: number }) => {
+      const min = Math.min(o.homeDec, o.drawDec, o.awayDec);
+      if (o.homeDec === min) return "home";
+      if (o.awayDec === min) return "away";
+      return "draw";
+    };
+
+    return users
+      .map((u) => {
+        let upsets = 0;
+        let withMarket = 0;
+        for (const b of allBets) {
+          if (b.userId !== u.id) continue;
+          const m = mById.get(b.matchId);
+          const o = oddsById.get(b.matchId);
+          if (!m || o == null || m.homeScore == null || m.awayScore == null) continue;
+          const actual = outcome(m.homeScore, m.awayScore);
+          if (outcome(b.predHome, b.predAway) !== actual) continue; // correct calls only
+          if (outcome(b.predHome, b.predAway) === favOf(o)) withMarket++;
+          else upsets++;
+        }
+        return {
+          userId: u.id,
+          name: u.name,
+          image: u.image,
+          upsets,
+          withMarket,
+          correct: upsets + withMarket,
+        };
+      })
+      .filter((r) => r.correct > 0)
+      .sort((a, b) => b.upsets - a.upsets || b.correct - a.correct);
   }),
 });

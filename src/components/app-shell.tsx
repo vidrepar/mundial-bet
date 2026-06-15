@@ -31,8 +31,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-24">
         <Suspense fallback={null}>{children}</Suspense>
       </main>
-      {authed && <PrivateNotes />}
-      {authed && <GroupChat />}
+      {authed && (
+        <Suspense fallback={null}>
+          <PrivateNotes />
+          <GroupChat />
+        </Suspense>
+      )}
     </>
   );
 }

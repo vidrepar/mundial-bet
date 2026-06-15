@@ -1,7 +1,7 @@
 import { eq, gt, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { bets, comments, emailOutbox, matches, odds, user } from "@/db/schema";
+import { bets, comments, emailOutbox, matches, odds, pushReminders, user } from "@/db/schema";
 import { buildCommentDigest, buildResultEmail } from "@/lib/emails";
 import {
   codeForTeam,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/espn";
 import type { EspnMatch } from "@/lib/espn.types";
 import { enqueueEmail, flushOutbox } from "@/lib/notify";
+import { notifyUser } from "@/lib/push";
 import { scoreBet } from "@/lib/scoring";
 
 export const runtime = "nodejs";
@@ -33,6 +34,9 @@ const DIGEST_MS = 30 * 60_000;
 const ODDS_TTL = 15 * 60_000;
 const ODDS_WINDOW = 36 * 60 * 60_000;
 const ODDS_MAX = 10;
+
+/* push a one-time "lock your pick" reminder this long before kickoff */
+const REMIND_MS = 30 * 60_000;
 
 async function handle(req: Request) {
   const url = new URL(req.url);
@@ -113,10 +117,13 @@ async function handle(req: Request) {
   /* 3. refresh betting odds (throttled) */
   const oddsUpdated = await refreshOdds(now);
 
-  /* 4. batched comment digest (~30 min) */
+  /* 4. kickoff push reminders for players who still owe a pick */
+  const reminded = await sendKickoffReminders(now);
+
+  /* 5. batched comment digest (~30 min) */
   const digests = maybeQueueCommentDigests(now);
 
-  /* 5. push the queue to the Gmail relay */
+  /* 6. push the queue to the Gmail relay */
   const sent = await flushOutbox();
 
   return NextResponse.json({
@@ -125,9 +132,58 @@ async function handle(req: Request) {
     updated,
     finishedNow,
     oddsUpdated,
+    reminded,
     digests,
     sent,
   });
+}
+
+/* one-time Web Push "lock your pick" to players within REMIND_MS of kickoff
+ * who haven't bet yet (deduped via push_reminders). */
+async function sendKickoffReminders(now: number): Promise<number> {
+  const soon = db
+    .select()
+    .from(matches)
+    .where(eq(matches.finished, false))
+    .all()
+    .filter((m) => {
+      const k = m.kickoffUtc.getTime();
+      return k > now && k - now <= REMIND_MS;
+    });
+  if (!soon.length) return 0;
+
+  const users = db.select({ id: user.id }).from(user).all();
+  let reminded = 0;
+  for (const m of soon) {
+    const bettors = new Set(
+      db.select({ u: bets.userId }).from(bets).where(eq(bets.matchId, m.id)).all().map((b) => b.u),
+    );
+    const already = new Set(
+      db
+        .select({ u: pushReminders.userId })
+        .from(pushReminders)
+        .where(eq(pushReminders.matchId, m.id))
+        .all()
+        .map((r) => r.u),
+    );
+    for (const u of users) {
+      if (bettors.has(u.id) || already.has(u.id)) continue;
+      const n = await notifyUser(u.id, {
+        title: "⏰ Lock your pick!",
+        body: `${m.homeFlag} ${m.homeTeam} v ${m.awayTeam} ${m.awayFlag} kicks off soon — you haven't predicted.`,
+        url: "/bet",
+        tag: `remind-${m.id}`,
+      });
+      if (n > 0) {
+        db.insert(pushReminders)
+          .values({ userId: u.id, matchId: m.id, sentAt: new Date(now) })
+          .onConflictDoNothing()
+          .run();
+        reminded++;
+      }
+    }
+  }
+  return reminded;
 }
 
 /* Poll ESPN's free odds feed for soon/live matches and cache decimal odds. */

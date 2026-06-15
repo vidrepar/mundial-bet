@@ -11,10 +11,21 @@ import { useTRPC } from "@/trpc/client";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
+function Delta({ delta }: { delta: number }) {
+  if (delta > 0) return <span className="text-emerald-500">▲{delta}</span>;
+  if (delta < 0) return <span className="text-red-500">▼{-delta}</span>;
+  return <span className="text-muted-foreground">·</span>;
+}
+
 export default function LeaderboardPage() {
   const trpc = useTRPC();
   const q = useQuery(trpc.leaderboard.standings.queryOptions());
+  const live = useQuery({
+    ...trpc.leaderboard.live.queryOptions(),
+    refetchInterval: 30_000,
+  });
   const rows = q.data ?? [];
+  const liveRows = live.data ?? [];
   const podium = rows.slice(0, 3);
 
   return (
@@ -22,6 +33,41 @@ export default function LeaderboardPage() {
       <h1 className="text-2xl font-bold">Lestvica</h1>
 
       {q.isLoading && <Skeleton className="h-40 w-full" />}
+
+      {/* live provisional standings while matches are on */}
+      {liveRows.length > 0 && (
+        <Card className="border-red-600/40">
+          <CardContent className="space-y-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-red-600">
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-75" />
+                <span className="relative inline-flex size-2 rounded-full bg-red-600" />
+              </span>
+              LIVE · if matches ended now
+            </div>
+            {liveRows.map((r) => (
+              <div key={r.userId} className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
+                  <span className="w-5 text-center font-bold">{r.liveRank}</span>
+                  <span className="w-7 text-center text-xs tabular-nums">
+                    <Delta delta={r.delta} />
+                  </span>
+                  <UserAvatar name={r.name} image={r.image} className="size-6" />
+                  <span className="font-medium">{r.name}</span>
+                </span>
+                <span className="flex items-center gap-2 tabular-nums">
+                  {r.prov !== 0 && (
+                    <span className="font-medium text-primary">
+                      {r.prov > 0 ? `+${r.prov}` : r.prov}
+                    </span>
+                  )}
+                  <span className="text-base font-bold">{r.livePoints}</span>
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* podium */}
       {podium.length > 0 && (

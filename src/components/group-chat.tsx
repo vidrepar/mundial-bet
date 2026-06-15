@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { MatchComments } from "@/components/match-comments";
 import { NotificationToggle } from "@/components/notification-toggle";
 import { useKeyboardPanel } from "@/components/use-keyboard-panel";
+import { usePanel } from "@/components/use-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/user-avatar";
@@ -46,7 +47,7 @@ function dayLabel(iso: string): string {
 
 export function GroupChat() {
   const { data: session } = useSession();
-  const [open, setOpen] = useState(false);
+  const [panel, setPanel] = usePanel();
   const trpc = useTRPC();
 
   const unread = useQuery({
@@ -60,10 +61,10 @@ export function GroupChat() {
 
   return (
     <>
-      {!open && (
+      {panel === null && (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => setPanel("chat", { history: "push" })}
           aria-label="Open group chat"
           className="fixed bottom-5 right-4 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95"
         >
@@ -75,7 +76,9 @@ export function GroupChat() {
           )}
         </button>
       )}
-      {open && <ChatPanel onClose={() => setOpen(false)} />}
+      {panel === "chat" && (
+        <ChatPanel onClose={() => setPanel(null, { history: "replace" })} />
+      )}
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { chatMessages, chatReactions, chatReads, matches, pushSubscriptions, user } from "@/db/schema";
+import { chatMessages, chatReactions, chatReads, comments, matches, pushSubscriptions, user } from "@/db/schema";
 import { emitChat } from "@/lib/chat-bus";
 import { notifyUsers } from "@/lib/push";
 import { createTRPCRouter, protectedProcedure } from "../init";
@@ -127,6 +127,13 @@ export const chatRouter = createTRPCRouter({
         .insert(chatMessages)
         .values({ userId: ctx.user.id, body: input.body, parentId, matchId, createdAt: now })
         .run();
+      /* a match-referencing message also seeds the match's comment thread, so
+       * the chat message is the opening comment there too (unified threads) */
+      if (matchId && input.body) {
+        db.insert(comments)
+          .values({ matchId, userId: ctx.user.id, body: input.body, createdAt: now })
+          .run();
+      }
       db.insert(chatReads)
         .values({ userId: ctx.user.id, lastReadAt: now })
         .onConflictDoUpdate({ target: chatReads.userId, set: { lastReadAt: now } })

@@ -5,6 +5,7 @@ import { NotebookPen, Plus, Trash2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useKeyboardPanel } from "@/components/use-keyboard-panel";
+import { usePanel } from "@/components/use-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/lib/auth-client";
@@ -13,22 +14,24 @@ import { useTRPC } from "@/trpc/client";
 
 export function PrivateNotes() {
   const { data: session } = useSession();
-  const [open, setOpen] = useState(false);
+  const [panel, setPanel] = usePanel();
   if (!session?.user) return null;
   return (
     <>
-      {!open && (
+      {panel === null && (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => setPanel("notes", { history: "push" })}
           aria-label="Private notes"
           title="Private notes"
-          className="fixed bottom-5 right-20 z-50 flex size-12 items-center justify-center rounded-full bg-secondary text-secondary-foreground shadow-lg ring-1 ring-border transition-transform hover:scale-105 active:scale-95"
+          className="fixed bottom-5 right-20 z-50 flex size-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 transition-transform hover:scale-105 active:scale-95"
         >
-          <NotebookPen className="size-5" />
+          <NotebookPen className="size-6" />
         </button>
       )}
-      {open && <NotesPanel onClose={() => setOpen(false)} />}
+      {panel === "notes" && (
+        <NotesPanel onClose={() => setPanel(null, { history: "replace" })} />
+      )}
     </>
   );
 }

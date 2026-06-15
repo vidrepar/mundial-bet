@@ -17,6 +17,7 @@ const LINKS = [
   { href: "/leaderboard", label: "Lestvica" },
   { href: "/stats", label: "Stats" },
   { href: "/analytics", label: "Analytics" },
+  { href: "/rivals", label: "Rivals" },
   { href: "/awards", label: "Awards" },
 ];
 
