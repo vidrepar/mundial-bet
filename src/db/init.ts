@@ -98,6 +98,46 @@ export function initDatabase() {
     )
   `);
 
+  /* chat threading + single match reference (add columns once) */
+  const chatCols = db
+    .all<{ name: string }>(sql`PRAGMA table_info(chat_messages)`)
+    .map((c) => c.name);
+  if (!chatCols.includes("parent_id")) {
+    db.run(
+      sql`ALTER TABLE chat_messages ADD COLUMN parent_id integer REFERENCES chat_messages(id) ON DELETE CASCADE`,
+    );
+  }
+  if (!chatCols.includes("match_id")) {
+    db.run(
+      sql`ALTER TABLE chat_messages ADD COLUMN match_id integer REFERENCES matches(id) ON DELETE SET NULL`,
+    );
+  }
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS chat_messages_parent_idx ON chat_messages(parent_id)`,
+  );
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS chat_reactions (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      message_id integer NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+      user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      emoji text NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL,
+      UNIQUE(message_id, user_id, emoji)
+    )
+  `);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS chat_reactions_message_idx ON chat_reactions(message_id)`,
+  );
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint text PRIMARY KEY,
+      user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      p256dh text NOT NULL,
+      auth text NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL
+    )
+  `);
+
   /* betting odds cache (polled from ESPN) */
   db.run(sql`
     CREATE TABLE IF NOT EXISTS odds (

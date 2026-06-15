@@ -190,8 +190,9 @@ export const commentReactions = sqliteTable(
   ],
 );
 
-/* persistent group chat — one global room (WhatsApp-group style). Messages can
- * inline-reference matches via `#<matchNumber>` tokens, resolved at read time. */
+/* persistent group chat — one global room (WhatsApp-group style). A message may
+ * reference a single match (matchId) and/or reply to another message (parentId,
+ * max 2 levels). */
 export const chatMessages = sqliteTable(
   "chat_messages",
   {
@@ -199,20 +200,68 @@ export const chatMessages = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    /* null = top-level; otherwise the parent message (flattened to 2 levels) */
+    parentId: integer("parent_id").references(
+      (): AnySQLiteColumn => chatMessages.id,
+      { onDelete: "cascade" },
+    ),
+    /* at most one referenced match per message */
+    matchId: integer("match_id").references(() => matches.id, {
+      onDelete: "set null",
+    }),
     body: text("body").notNull(),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
   },
-  (t) => [index("chat_messages_created_idx").on(t.createdAt)],
+  (t) => [
+    index("chat_messages_created_idx").on(t.createdAt),
+    index("chat_messages_parent_idx").on(t.parentId),
+  ],
 );
 
-/* per-user last-read marker for the group chat → unread badge */
+/* emoji reactions on chat messages (toggle, one row per message+user+emoji) */
+export const chatReactions = sqliteTable(
+  "chat_reactions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    messageId: integer("message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    unique("chat_reactions_uq").on(t.messageId, t.userId, t.emoji),
+    index("chat_reactions_message_idx").on(t.messageId),
+  ],
+);
+
+/* per-user last-read marker for the group chat → unread badge + seen receipts */
 export const chatReads = sqliteTable("chat_reads", {
   userId: text("user_id")
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
   lastReadAt: integer("last_read_at", { mode: "timestamp" }).notNull(),
+});
+
+/* Web Push subscriptions (one per browser/device) for system notifications,
+ * incl. iOS installed-PWA. */
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  endpoint: text("endpoint").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
 });
 
 /* latest betting odds per match, polled from ESPN's free no-auth odds feed.

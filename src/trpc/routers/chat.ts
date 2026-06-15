@@ -1,60 +1,80 @@
 import { and, asc, desc, eq, gt, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { chatMessages, chatReads, matches, user } from "@/db/schema";
+import { chatMessages, chatReactions, chatReads, matches, pushSubscriptions, user } from "@/db/schema";
+import { emitChat } from "@/lib/chat-bus";
+import { notifyUsers } from "@/lib/push";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
-const MAX_HISTORY = 300;
-const REF_RE = /#(\d+)/g;
-
-/* pull every #<matchNumber> token out of a batch of message bodies */
-function referencedMatchNumbers(bodies: string[]): number[] {
-  const nums = new Set<number>();
-  for (const b of bodies) {
-    for (const m of b.matchAll(REF_RE)) nums.add(Number(m[1]));
-  }
-  return [...nums];
-}
+const MAX_HISTORY = 500;
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢", "🐐", "💀"] as const;
 
 export const chatRouter = createTRPCRouter({
-  /* the whole room, oldest→newest, plus a lookup of any matches referenced
-   * inline so the client can render rich match chips without extra calls */
-  list: protectedProcedure.query(() => {
+  /* whole room as a flat list (top-level + replies) with reactions and a
+   * lookup of referenced matches; the client builds the 2-level tree */
+  list: protectedProcedure.query(({ ctx }) => {
     const rows = db
       .select({
         id: chatMessages.id,
         body: chatMessages.body,
         createdAt: chatMessages.createdAt,
         userId: chatMessages.userId,
+        parentId: chatMessages.parentId,
+        matchId: chatMessages.matchId,
         name: user.name,
         image: user.image,
       })
       .from(chatMessages)
       .innerJoin(user, eq(chatMessages.userId, user.id))
-      .orderBy(desc(chatMessages.createdAt))
+      .orderBy(desc(chatMessages.id))
       .limit(MAX_HISTORY)
       .all()
       .reverse();
 
-    const refNums = referencedMatchNumbers(rows.map((r) => r.body));
-    const refMatches = refNums.length
-      ? db
-          .select()
-          .from(matches)
-          .where(inArray(matches.matchNumber, refNums))
-          .all()
-      : [];
+    /* reactions grouped per message */
+    const reactRows = db
+      .select({
+        messageId: chatReactions.messageId,
+        emoji: chatReactions.emoji,
+        userId: chatReactions.userId,
+      })
+      .from(chatReactions)
+      .all();
+    const me = ctx.user.id;
+    const byMsg = new Map<number, Map<string, { count: number; mine: boolean }>>();
+    for (const r of reactRows) {
+      const m = byMsg.get(r.messageId) ?? new Map();
+      const cur = m.get(r.emoji) ?? { count: 0, mine: false };
+      cur.count++;
+      if (r.userId === me) cur.mine = true;
+      m.set(r.emoji, cur);
+      byMsg.set(r.messageId, m);
+    }
 
+    /* resolve referenced matches */
+    const matchIds = [
+      ...new Set(rows.map((r) => r.matchId).filter((x): x is number => !!x)),
+    ];
+    const refMatches = matchIds.length
+      ? db.select().from(matches).where(inArray(matches.id, matchIds)).all()
+      : [];
     const matchLookup: Record<number, ReturnType<typeof shapeChip>> = {};
-    for (const m of refMatches) matchLookup[m.matchNumber] = shapeChip(m);
+    for (const m of refMatches) matchLookup[m.id] = shapeChip(m);
 
     return {
-      messages: rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
+      messages: rows.map((r) => ({
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+        reactions: [...(byMsg.get(r.id)?.entries() ?? [])].map(([emoji, v]) => ({
+          emoji,
+          count: v.count,
+          mine: v.mine,
+        })),
+      })),
       matches: matchLookup,
     };
   }),
 
-  /* group members → @mention autocomplete */
   members: protectedProcedure.query(() =>
     db
       .select({ id: user.id, name: user.name, image: user.image })
@@ -64,23 +84,85 @@ export const chatRouter = createTRPCRouter({
   ),
 
   send: protectedProcedure
-    .input(z.object({ body: z.string().trim().min(1).max(1000) }))
+    .input(
+      z.object({
+        body: z.string().trim().max(1000),
+        parentId: z.number().int().nullish(),
+        matchId: z.number().int().nullish(),
+      }),
+    )
     .mutation(({ ctx, input }) => {
+      if (!input.body && !input.matchId) return { ok: false, id: 0 };
+      /* replies flatten to max 2 levels and never carry a match reference */
+      let parentId: number | null = null;
+      let matchId: number | null = input.matchId ?? null;
+      if (input.parentId != null) {
+        const parent = db
+          .select({ id: chatMessages.id, parentId: chatMessages.parentId })
+          .from(chatMessages)
+          .where(eq(chatMessages.id, input.parentId))
+          .get();
+        if (parent) {
+          parentId = parent.parentId ?? parent.id;
+          matchId = null;
+        }
+      }
       const now = new Date();
       const res = db
         .insert(chatMessages)
-        .values({ userId: ctx.user.id, body: input.body, createdAt: now })
+        .values({ userId: ctx.user.id, body: input.body, parentId, matchId, createdAt: now })
         .run();
-      /* sender has implicitly read the room up to their own message */
       db.insert(chatReads)
         .values({ userId: ctx.user.id, lastReadAt: now })
-        .onConflictDoUpdate({
-          target: chatReads.userId,
-          set: { lastReadAt: now },
-        })
+        .onConflictDoUpdate({ target: chatReads.userId, set: { lastReadAt: now } })
         .run();
+
+      emitChat({ kind: "refresh" });
+      const preview = input.body || "shared a match ⚽";
+      void notifyUsers(ctx.user.id, {
+        title: "Mundial Group",
+        body: `${ctx.user.name}: ${preview}`.slice(0, 140),
+        url: "/",
+        tag: "mundial-chat",
+      }).catch(() => {});
       return { ok: true, id: Number(res.lastInsertRowid) };
     }),
+
+  react: protectedProcedure
+    .input(z.object({ messageId: z.number().int(), emoji: z.enum(REACTION_EMOJIS) }))
+    .mutation(({ ctx, input }) => {
+      const existing = db
+        .select({ id: chatReactions.id })
+        .from(chatReactions)
+        .where(
+          and(
+            eq(chatReactions.messageId, input.messageId),
+            eq(chatReactions.userId, ctx.user.id),
+            eq(chatReactions.emoji, input.emoji),
+          ),
+        )
+        .get();
+      if (existing) {
+        db.delete(chatReactions).where(eq(chatReactions.id, existing.id)).run();
+      } else {
+        db.insert(chatReactions)
+          .values({
+            messageId: input.messageId,
+            userId: ctx.user.id,
+            emoji: input.emoji,
+            createdAt: new Date(),
+          })
+          .run();
+      }
+      emitChat({ kind: "refresh" });
+      return { ok: true };
+    }),
+
+  /* ephemeral typing ping → fanned out over SSE, nothing persisted */
+  setTyping: protectedProcedure.mutation(({ ctx }) => {
+    emitChat({ kind: "typing", userId: ctx.user.id, name: ctx.user.name });
+    return { ok: true };
+  }),
 
   markRead: protectedProcedure.mutation(({ ctx }) => {
     const now = new Date();
@@ -88,10 +170,10 @@ export const chatRouter = createTRPCRouter({
       .values({ userId: ctx.user.id, lastReadAt: now })
       .onConflictDoUpdate({ target: chatReads.userId, set: { lastReadAt: now } })
       .run();
+    emitChat({ kind: "seen" });
     return { ok: true };
   }),
 
-  /* count of others' messages newer than my last read → FAB badge */
   unread: protectedProcedure.query(({ ctx }) => {
     const read = db
       .select({ lastReadAt: chatReads.lastReadAt })
@@ -99,22 +181,57 @@ export const chatRouter = createTRPCRouter({
       .where(eq(chatReads.userId, ctx.user.id))
       .get();
     const since = read?.lastReadAt ?? new Date(0);
-    const row = db
+    const rows = db
       .select({ id: chatMessages.id })
       .from(chatMessages)
-      .where(
-        and(
-          ne(chatMessages.userId, ctx.user.id),
-          gt(chatMessages.createdAt, since),
-        ),
-      )
-      .orderBy(asc(chatMessages.id))
+      .where(and(ne(chatMessages.userId, ctx.user.id), gt(chatMessages.createdAt, since)))
       .all();
-    return { count: row.length };
+    return { count: rows.length };
   }),
+
+  /* who has read the room + up to when → seen receipts */
+  seen: protectedProcedure.query(() =>
+    db
+      .select({
+        userId: chatReads.userId,
+        name: user.name,
+        image: user.image,
+        lastReadAt: chatReads.lastReadAt,
+      })
+      .from(chatReads)
+      .innerJoin(user, eq(chatReads.userId, user.id))
+      .all()
+      .map((r) => ({ ...r, lastReadAt: r.lastReadAt.toISOString() })),
+  ),
+
+  pushSubscribe: protectedProcedure
+    .input(z.object({ endpoint: z.string().url(), p256dh: z.string(), auth: z.string() }))
+    .mutation(({ ctx, input }) => {
+      db.insert(pushSubscriptions)
+        .values({
+          endpoint: input.endpoint,
+          userId: ctx.user.id,
+          p256dh: input.p256dh,
+          auth: input.auth,
+          createdAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: pushSubscriptions.endpoint,
+          set: { userId: ctx.user.id, p256dh: input.p256dh, auth: input.auth },
+        })
+        .run();
+      return { ok: true };
+    }),
+
+  pushUnsubscribe: protectedProcedure
+    .input(z.object({ endpoint: z.string() }))
+    .mutation(({ input }) => {
+      db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, input.endpoint)).run();
+      return { ok: true };
+    }),
 });
 
-/* compact match shape for an inline chat chip */
+/* compact match shape for an inline chat chip / thread header */
 function shapeChip(m: typeof matches.$inferSelect) {
   return {
     id: m.id,
