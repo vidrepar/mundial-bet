@@ -31,10 +31,10 @@ export default function BetPage() {
   /* deep-link target from the group chat: ?m=<matchNumber> */
   const [refMatch] = useQueryState("m", parseAsInteger);
   const liveProbe = useQuery({
-    ...trpc.matches.list.queryOptions({ filter: "live" }),
+    ...trpc.matches.hasLive.queryOptions(),
     refetchInterval: 60_000,
   });
-  const hasLive = (liveProbe.data?.length ?? 0) > 0;
+  const hasLive = liveProbe.data?.hasLive ?? false;
   /* a referenced match must be visible regardless of the active tab */
   const filter = refMatch ? "all" : (urlFilter ?? (hasLive ? "live" : "open"));
 

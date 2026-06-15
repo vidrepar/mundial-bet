@@ -5,6 +5,7 @@ import { Suspense, useEffect } from "react";
 import { GroupChat } from "@/components/group-chat";
 import { Nav } from "@/components/nav";
 import { PrivateNotes } from "@/components/private-notes";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/lib/auth-client";
 
 /* Gate the whole app behind login: signed-out users only ever see /login
@@ -22,7 +23,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [isPending, authed, pathname, router]);
 
-  if (isPending) return null;
+  /* branded skeleton during the auth check → instant paint, no white flash */
+  if (isPending) {
+    return (
+      <>
+        <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
+          <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4">
+            <span className="text-xl">⚽</span>
+            <Skeleton className="h-6 w-28" />
+            <Skeleton className="ml-auto size-7 rounded-full" />
+          </div>
+        </header>
+        <main className="mx-auto w-full max-w-5xl space-y-4 px-4 pb-24 pt-6">
+          <Skeleton className="h-9 w-40" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+        </main>
+      </>
+    );
+  }
   if (!authed && pathname !== "/login") return null;
 
   return (

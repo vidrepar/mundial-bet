@@ -15,6 +15,7 @@ import { useTRPC } from "@/trpc/client";
 const LINKS = [
   { href: "/bet", label: "Bet" },
   { href: "/leaderboard", label: "Lestvica" },
+  { href: "/groups", label: "Groups" },
   { href: "/stats", label: "Stats" },
   { href: "/analytics", label: "Analytics" },
   { href: "/rivals", label: "Rivals" },

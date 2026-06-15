@@ -2,6 +2,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { bets, comments, matches, odds } from "@/db/schema";
+import { cached } from "@/lib/cache";
 import { isAdmin } from "@/lib/env";
 import { TrpcError } from "@/lib/errors";
 import { shapeMatch } from "@/lib/match-shape";
@@ -124,6 +125,19 @@ export const matchesRouter = createTRPCRouter({
         odds: oddsRow,
       });
     }),
+
+  /* cheap, user-independent "is anything live?" → cached in Redis (≈8s) so the
+   * landing redirect to the Live tab is instant and doesn't recompute per load */
+  hasLive: baseProcedure.query(() =>
+    cached("matches:hasLive", 8000, () => {
+      const live = db
+        .select({ id: matches.id, status: matches.status, finished: matches.finished })
+        .from(matches)
+        .all()
+        .filter((m) => m.status === "live" && !m.finished);
+      return { hasLive: live.length > 0, count: live.length };
+    }),
+  ),
 
   amAdmin: protectedProcedure.query(({ ctx }) => ({
     isAdmin: isAdmin(ctx.user.email),

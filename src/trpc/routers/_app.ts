@@ -4,6 +4,7 @@ import { awardsRouter } from "./awards";
 import { betsRouter } from "./bets";
 import { chatRouter } from "./chat";
 import { commentsRouter } from "./comments";
+import { groupsRouter } from "./groups";
 import { leaderboardRouter } from "./leaderboard";
 import { matchesRouter } from "./matches";
 import { notesRouter } from "./notes";
@@ -17,6 +18,7 @@ export const appRouter = createTRPCRouter({
   comments: commentsRouter,
   notes: notesRouter,
   rivals: rivalsRouter,
+  groups: groupsRouter,
   leaderboard: leaderboardRouter,
   stats: statsRouter,
   analytics: analyticsRouter,
