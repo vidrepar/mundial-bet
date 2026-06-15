@@ -252,6 +252,34 @@ export const chatReads = sqliteTable("chat_reads", {
   lastReadAt: integer("last_read_at", { mode: "timestamp" }).notNull(),
 });
 
+/* each user can pick one rival → head-to-head record + taunts */
+export const rivals = sqliteTable("rivals", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  rivalId: text("rival_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+/* dedupe for kickoff push reminders (one per user per match) */
+export const pushReminders = sqliteTable(
+  "push_reminders",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    matchId: integer("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    sentAt: integer("sent_at", { mode: "timestamp" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.matchId] })],
+);
+
 /* private per-user notes — a personal scratchpad (predictions, reminders),
  * never shown to anyone else. May optionally pin a match. */
 export const notes = sqliteTable(

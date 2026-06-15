@@ -513,7 +513,7 @@ function MessageRow({
   onReact: (id: number, e: string) => void;
   onToggleThread: () => void;
 }) {
-  const mentionsMe = !!meName && m.body.includes(`@${meName}`);
+  const mentionsMe = !!meName && (m.body ?? "").includes(`@${meName}`);
   return (
     <div className={cn("flex gap-2", mine ? "justify-end" : "justify-start")}>
       {!mine && <div className="w-7 shrink-0">{startRun && <UserAvatar name={m.name} image={m.image} className="size-7" />}</div>}
@@ -555,9 +555,10 @@ function MessageRow({
   );
 }
 
-function Reactions({ reactions, onToggle, light }: { reactions: Reaction[]; onToggle: (e: string) => void; light?: boolean }) {
+function Reactions({ reactions, onToggle, light }: { reactions: Reaction[] | undefined; onToggle: (e: string) => void; light?: boolean }) {
   const [open, setOpen] = useState(false);
-  if (reactions.length === 0 && !open) {
+  const rs = reactions ?? [];
+  if (rs.length === 0 && !open) {
     return (
       <button
         type="button"
@@ -571,7 +572,7 @@ function Reactions({ reactions, onToggle, light }: { reactions: Reaction[]; onTo
   }
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1">
-      {reactions.map((r) => (
+      {rs.map((r) => (
         <button
           key={r.emoji}
           type="button"
@@ -613,7 +614,8 @@ function Reactions({ reactions, onToggle, light }: { reactions: Reaction[]; onTo
 
 /* render @mentions in a message body as highlighted chips */
 function renderBody(body: string, members: Member[], meName: string) {
-  const names = [...members].sort((a, b) => b.name.length - a.name.length);
+  if (!body) return [];
+  const names = [...(members ?? [])].sort((a, b) => b.name.length - a.name.length);
   const out: React.ReactNode[] = [];
   let buf = "";
   let key = 0;

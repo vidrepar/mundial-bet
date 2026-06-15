@@ -22,7 +22,7 @@ function getQueryClient() {
 
 /* persist the whole query cache to localStorage → instant warm starts +
  * offline reads. Bumping CACHE_BUSTER invalidates every stored entry. */
-const CACHE_BUSTER = "v1";
+const CACHE_BUSTER = "v2";
 function getPersister() {
   if (typeof window === "undefined") return null;
   return createSyncStoragePersister({

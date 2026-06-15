@@ -170,6 +170,23 @@ export function initDatabase() {
   `);
   db.run(sql`CREATE INDEX IF NOT EXISTS notes_user_idx ON notes(user_id)`);
 
+  /* rivals + kickoff push reminder dedupe */
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS rivals (
+      user_id text PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
+      rival_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      created_at integer DEFAULT (unixepoch()) NOT NULL
+    )
+  `);
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS push_reminders (
+      user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      match_id integer NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      sent_at integer NOT NULL,
+      PRIMARY KEY (user_id, match_id)
+    )
+  `);
+
   const res = seedDatabase();
   console.log(
     `[db] ready · ${res.teams} teams · +${res.matchesInserted} matches`,

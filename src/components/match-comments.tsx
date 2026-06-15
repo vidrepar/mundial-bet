@@ -276,7 +276,7 @@ function Reactions({
   onToggle,
   onReply,
 }: {
-  reactions: Reaction[];
+  reactions: Reaction[] | undefined;
   signedIn: boolean;
   onToggle: (emoji: string) => void;
   onReply?: () => void;
@@ -284,7 +284,7 @@ function Reactions({
   const [open, setOpen] = useState(false);
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1">
-      {reactions.map((r) => (
+      {(reactions ?? []).map((r) => (
         <button
           key={r.emoji}
           type="button"
