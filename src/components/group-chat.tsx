@@ -2,10 +2,18 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { Hash, MessagesSquare, Search, Send, X } from "lucide-react";
+import {
+  ExternalLink,
+  Hash,
+  MessagesSquare,
+  Search,
+  Send,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { MatchComments } from "@/components/match-comments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/user-avatar";
@@ -84,6 +92,10 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
 
   const [text, setText] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [expanded, setExpanded] = useState<{
+    msgId: number;
+    match: ChipMatch;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -130,7 +142,15 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
     setPickerOpen(false);
     inputRef.current?.focus();
   }
-  function openChip(m: ChipMatch) {
+  /* tap a match chip → expand its comment thread inline, right in the chat */
+  function toggleThread(msgId: number, m: ChipMatch) {
+    setExpanded((cur) =>
+      cur && cur.msgId === msgId && cur.match.id === m.id
+        ? null
+        : { msgId, match: m },
+    );
+  }
+  function openMatchPage(m: ChipMatch) {
     onClose();
     router.push(`/bet?m=${m.matchNumber}`);
   }
@@ -185,8 +205,15 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
                 mine={mine}
                 startRun={startRun}
                 matches={matchLookup}
-                onChip={openChip}
+                onChip={(match) => toggleThread(m.id, match)}
               />
+              {expanded?.msgId === m.id && (
+                <InlineThread
+                  match={expanded.match}
+                  onOpenPage={() => openMatchPage(expanded.match)}
+                  onClose={() => setExpanded(null)}
+                />
+              )}
             </div>
           );
         })}
@@ -227,6 +254,56 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
           <Send />
         </Button>
       </div>
+    </div>
+  );
+}
+
+/* a match's full comment thread, expanded inline inside the chat stream */
+function InlineThread({
+  match,
+  onOpenPage,
+  onClose,
+}: {
+  match: ChipMatch;
+  onOpenPage: () => void;
+  onClose: () => void;
+}) {
+  const live = match.status === "live";
+  return (
+    <div className="my-1 overflow-hidden rounded-xl border bg-card">
+      <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2 text-xs">
+        <span>{match.homeFlag}</span>
+        <span className="truncate font-semibold">{match.homeTeam}</span>
+        <span className="tabular-nums text-muted-foreground">
+          {match.finished || live
+            ? `${match.homeScore ?? 0}–${match.awayScore ?? 0}`
+            : "v"}
+        </span>
+        <span className="truncate font-semibold">{match.awayTeam}</span>
+        <span>{match.awayFlag}</span>
+        <span className="ml-1 shrink-0 text-muted-foreground">
+          · {match.stageLabel}
+        </span>
+        <div className="ml-auto flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={onOpenPage}
+            title="Open on the matches page"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <ExternalLink className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Collapse thread"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      </div>
+      <MatchComments matchId={match.id} />
     </div>
   );
 }
