@@ -1,12 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import dynamic from "next/dynamic";
 import { NumberTicker } from "@/components/magicui/number-ticker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTRPC } from "@/trpc/client";
 
-const COLORS = ["#34d399", "#60a5fa", "#fbbf24", "#f472b6", "#a78bfa", "#f87171"];
+/* lazy-load the chart (recharts) so it never bloats the initial Stats bundle */
+const PointsChart = dynamic(
+  () => import("@/components/points-chart").then((m) => m.PointsChart),
+  { ssr: false, loading: () => <div className="h-72 w-full animate-pulse rounded-lg bg-muted" /> },
+);
 
 export default function StatsPage() {
   const trpc = useTRPC();
@@ -48,33 +52,7 @@ export default function StatsPage() {
               The race chart unlocks once results start coming in. 📈
             </p>
           ) : (
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ left: -20, right: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff14" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#1f2937",
-                      border: "1px solid #374151",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  {tl?.series.map((s, i) => (
-                    <Line
-                      key={s.userId}
-                      type="monotone"
-                      dataKey={s.name}
-                      stroke={COLORS[i % COLORS.length]}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <PointsChart data={chartData} series={tl?.series ?? []} />
           )}
         </CardContent>
       </Card>
