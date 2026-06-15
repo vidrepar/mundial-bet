@@ -1,7 +1,7 @@
 /* Mundial '26 service worker — installable PWA + offline app shell.
  * Strategy: never touch /api (always live); cache-first for static assets;
  * network-first for page navigations with an offline fallback. */
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL = `mundial-shell-${VERSION}`;
 const ASSETS = `mundial-assets-${VERSION}`;
 const PRECACHE = ["/", "/login", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
@@ -33,20 +33,18 @@ self.addEventListener("fetch", (event) => {
   /* never cache dynamic data — tRPC / auth / cron stay live */
   if (url.pathname.startsWith("/api/")) return;
 
-  /* page navigations: stale-while-revalidate → serve the cached shell instantly
-   * (fast repeat/PWA launches), refresh in the background, "/" fallback offline */
+  /* page navigations: NETWORK-FIRST so a new deploy's HTML (and its fresh chunk
+   * hashes) always win; cache is only an offline fallback. Serving a stale
+   * cached shell here would reference old chunks that 404 after a deploy. */
   if (request.mode === "navigate") {
     event.respondWith(
-      caches.open(SHELL).then(async (cache) => {
-        const cached = await cache.match(request);
-        const network = fetch(request)
-          .then((res) => {
-            cache.put(request, res.clone());
-            return res;
-          })
-          .catch(() => cached || cache.match("/"));
-        return cached || network;
-      }),
+      fetch(request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(SHELL).then((c) => c.put(request, copy));
+          return res;
+        })
+        .catch(() => caches.match(request).then((r) => r || caches.match("/"))),
     );
     return;
   }
