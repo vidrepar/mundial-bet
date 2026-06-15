@@ -29,6 +29,7 @@ type MatchRow = {
   homeScore: number | null;
   awayScore: number | null;
   status: string;
+  clock: string | null;
   finished: boolean;
   locked: boolean;
   myBet: { predHome: number; predAway: number; points: number | null } | null;
@@ -136,6 +137,9 @@ export function MatchBetCard({
                 <span className="relative inline-flex size-2 rounded-full bg-red-600" />
               </span>
               LIVE
+              {match.clock && (
+                <span className="tabular-nums font-bold">· {match.clock}</span>
+              )}
             </span>
           ) : match.locked ? (
             <span className="inline-flex items-center gap-1">
@@ -168,7 +172,7 @@ export function MatchBetCard({
               </div>
               {isLive && (
                 <span className="text-[10px] font-semibold text-red-600">
-                  LIVE
+                  {match.clock ?? "LIVE"}
                 </span>
               )}
             </div>
@@ -329,30 +333,51 @@ function OddsRow({
   odds: NonNullable<MatchRow["odds"]>;
 }) {
   const fav = Math.min(odds.home, odds.draw, odds.away);
+  /* implied probabilities: invert decimal odds, strip the bookmaker margin */
+  const inv = { home: 1 / odds.home, draw: 1 / odds.draw, away: 1 / odds.away };
+  const sum = inv.home + inv.draw + inv.away;
+  const pct = {
+    home: Math.round((inv.home / sum) * 100),
+    draw: Math.round((inv.draw / sum) * 100),
+    away: Math.round((inv.away / sum) * 100),
+  };
   const cells = [
     { key: "home", label: match.homeFlag, val: odds.home },
     { key: "draw", label: "Draw", val: odds.draw },
     { key: "away", label: match.awayFlag, val: odds.away },
   ];
   return (
-    <div className="flex items-center gap-1.5 border-t bg-muted/20 px-4 py-2">
-      <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        Odds
-      </span>
-      {cells.map((c) => (
-        <div
-          key={c.key}
-          className={cn(
-            "flex flex-1 items-center justify-between gap-1 rounded-md border px-2 py-1 text-xs",
-            c.val === fav
-              ? "border-primary/40 bg-primary/10 text-foreground"
-              : "text-muted-foreground",
-          )}
-        >
-          <span className="truncate">{c.label}</span>
-          <span className="font-semibold tabular-nums">{c.val.toFixed(2)}</span>
-        </div>
-      ))}
+    <div className="space-y-1.5 border-t bg-muted/20 px-4 py-2">
+      <div className="flex items-center gap-1.5">
+        <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          Odds
+        </span>
+        {cells.map((c) => (
+          <div
+            key={c.key}
+            className={cn(
+              "flex flex-1 items-center justify-between gap-1 rounded-md border px-2 py-1 text-xs",
+              c.val === fav
+                ? "border-primary/40 bg-primary/10 text-foreground"
+                : "text-muted-foreground",
+            )}
+          >
+            <span className="truncate">{c.label}</span>
+            <span className="font-semibold tabular-nums">{c.val.toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+      {/* win-probability bar (home / draw / away) */}
+      <div className="flex h-2 overflow-hidden rounded-full">
+        <div className="bg-emerald-500" style={{ width: `${pct.home}%` }} title={`${match.homeTeam} ${pct.home}%`} />
+        <div className="bg-zinc-500" style={{ width: `${pct.draw}%` }} title={`Draw ${pct.draw}%`} />
+        <div className="bg-sky-500" style={{ width: `${pct.away}%` }} title={`${match.awayTeam} ${pct.away}%`} />
+      </div>
+      <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground">
+        <span>{pct.home}%</span>
+        <span>draw {pct.draw}%</span>
+        <span>{pct.away}%</span>
+      </div>
     </div>
   );
 }

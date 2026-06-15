@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect } from "react";
 import { GroupChat } from "@/components/group-chat";
 import { Nav } from "@/components/nav";
+import { PrivateNotes } from "@/components/private-notes";
 import { useSession } from "@/lib/auth-client";
 
 /* Gate the whole app behind login: signed-out users only ever see /login
@@ -30,6 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-24">
         <Suspense fallback={null}>{children}</Suspense>
       </main>
+      {authed && <PrivateNotes />}
       {authed && <GroupChat />}
     </>
   );

@@ -47,6 +47,7 @@ export async function fetchEspnMatches(dateKey: string): Promise<EspnMatch[]> {
     const home = cs.find((c) => c.homeAway === "home");
     const away = cs.find((c) => c.homeAway === "away");
     if (!home || !away || !state) continue;
+    const short = comp?.status?.type?.shortDetail;
     out.push({
       id: String(ev.id ?? ""),
       homeCode: String(home.team?.abbreviation ?? "").toUpperCase(),
@@ -54,6 +55,7 @@ export async function fetchEspnMatches(dateKey: string): Promise<EspnMatch[]> {
       homeScore: num(home.score),
       awayScore: num(away.score),
       state,
+      clock: short ? String(short) : null,
     });
   }
   return out;

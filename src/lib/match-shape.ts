@@ -31,6 +31,7 @@ export function shapeMatch(
     homeScore: m.homeScore,
     awayScore: m.awayScore,
     status: m.status,
+    clock: m.clock,
     finished: m.finished,
     locked,
     myBet: opts.myBet

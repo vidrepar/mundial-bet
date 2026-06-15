@@ -108,6 +108,8 @@ export const matches = sqliteTable(
     awayScore: integer("away_score"),
     /* scheduled | live | finished */
     status: text("status").notNull().default("scheduled"),
+    /* live clock label from ESPN while in-play: "56'", "HT", "90'+5'" */
+    clock: text("clock"),
     finished: integer("finished", { mode: "boolean" }).notNull().default(false),
   },
   (t) => [index("matches_kickoff_idx").on(t.kickoffUtc)],
@@ -249,6 +251,26 @@ export const chatReads = sqliteTable("chat_reads", {
     .references(() => user.id, { onDelete: "cascade" }),
   lastReadAt: integer("last_read_at", { mode: "timestamp" }).notNull(),
 });
+
+/* private per-user notes — a personal scratchpad (predictions, reminders),
+ * never shown to anyone else. May optionally pin a match. */
+export const notes = sqliteTable(
+  "notes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    matchId: integer("match_id").references(() => matches.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [index("notes_user_idx").on(t.userId)],
+);
 
 /* Web Push subscriptions (one per browser/device) for system notifications,
  * incl. iOS installed-PWA. */

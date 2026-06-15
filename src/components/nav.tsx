@@ -5,6 +5,7 @@ import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { GradientText } from "@/components/magicui/gradient-text";
+import { InstallButton } from "@/components/install-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -62,6 +63,7 @@ export function Nav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          <InstallButton />
           {isPending ? null : session?.user ? (
             <>
               <UserAvatar

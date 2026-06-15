@@ -273,6 +273,7 @@ function shapeChip(m: typeof matches.$inferSelect) {
     homeScore: m.homeScore,
     awayScore: m.awayScore,
     status: m.status,
+    clock: m.clock,
     finished: m.finished,
     stageLabel: m.stageLabel,
     kickoff: m.kickoffUtc.toISOString(),

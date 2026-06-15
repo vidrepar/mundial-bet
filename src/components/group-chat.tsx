@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MatchComments } from "@/components/match-comments";
 import { NotificationToggle } from "@/components/notification-toggle";
+import { useKeyboardPanel } from "@/components/use-keyboard-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/user-avatar";
@@ -95,7 +96,9 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
   const [typers, setTypers] = useState<Record<string, { name: string; at: number }>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const typingSentAt = useRef(0);
+  useKeyboardPanel(panelRef);
 
   const chat = useQuery({ ...trpc.chat.list.queryOptions(), refetchInterval: 15_000 });
   const members = useQuery(trpc.chat.members.queryOptions());
@@ -229,7 +232,7 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
   const activeTypers = Object.values(typers);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background sm:inset-auto sm:bottom-4 sm:right-4 sm:h-[70vh] sm:max-h-[680px] sm:w-[400px] sm:rounded-2xl sm:border sm:shadow-2xl">
+    <div ref={panelRef} className="fixed inset-0 z-50 flex flex-col bg-background sm:inset-auto sm:bottom-4 sm:right-4 sm:h-[70vh] sm:max-h-[680px] sm:w-[400px] sm:rounded-2xl sm:border sm:shadow-2xl">
       <div className="flex items-center gap-3 border-b px-4 py-3 sm:rounded-t-2xl">
         <div className="flex size-9 items-center justify-center rounded-full bg-primary/15 text-lg">⚽</div>
         <div className="min-w-0 flex-1">
@@ -657,7 +660,7 @@ function MatchChip({ m }: { m: ChipMatch }) {
       <span className="truncate">{m.awayTeam}</span>
       <span>{m.awayFlag}</span>
       {live ? (
-        <span className="ml-0.5 font-bold text-red-600">LIVE</span>
+        <span className="ml-0.5 font-bold text-red-600">{m.clock ? `LIVE ${m.clock}` : "LIVE"}</span>
       ) : m.finished ? (
         <span className="ml-0.5 text-muted-foreground">FT</span>
       ) : (
@@ -691,10 +694,8 @@ function MatchPicker({ onPick, onClose }: { onPick: (m: ChipMatch) => void; onCl
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Attach a match…"
+            placeholder="Search to attach a match…"
             className="w-full bg-transparent text-sm outline-none"
-            // eslint-disable-next-line jsx-a11y/no-autofocus
-            autoFocus
           />
         </div>
         <Button variant="ghost" size="sm" onClick={onClose}>
@@ -718,6 +719,7 @@ function MatchPicker({ onPick, onClose }: { onPick: (m: ChipMatch) => void; onCl
                 homeScore: m.homeScore,
                 awayScore: m.awayScore,
                 status: m.status,
+                clock: m.clock,
                 finished: m.finished,
                 stageLabel: m.stageLabel,
                 kickoff: m.kickoff,

@@ -79,13 +79,13 @@ async function handle(req: Request) {
 
       if (ev.state === "in") {
         db.update(matches)
-          .set({ status: "live", homeScore: hs, awayScore: as })
+          .set({ status: "live", homeScore: hs, awayScore: as, clock: ev.clock })
           .where(eq(matches.id, m.id))
           .run();
         updated++;
       } else if (ev.state === "post" && hs != null && as != null) {
         db.update(matches)
-          .set({ status: "finished", finished: true, homeScore: hs, awayScore: as })
+          .set({ status: "finished", finished: true, homeScore: hs, awayScore: as, clock: null })
           .where(eq(matches.id, m.id))
           .run();
         /* auto-score every bet (admin can still reopen/setResult to override) */

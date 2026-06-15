@@ -150,6 +150,26 @@ export function initDatabase() {
     )
   `);
 
+  /* live match clock column (add once) */
+  const matchCols = db
+    .all<{ name: string }>(sql`PRAGMA table_info(matches)`)
+    .map((c) => c.name);
+  if (!matchCols.includes("clock")) {
+    db.run(sql`ALTER TABLE matches ADD COLUMN clock text`);
+  }
+
+  /* private per-user notes */
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS notes (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      match_id integer REFERENCES matches(id) ON DELETE SET NULL,
+      body text NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL
+    )
+  `);
+  db.run(sql`CREATE INDEX IF NOT EXISTS notes_user_idx ON notes(user_id)`);
+
   const res = seedDatabase();
   console.log(
     `[db] ready · ${res.teams} teams · +${res.matchesInserted} matches`,
