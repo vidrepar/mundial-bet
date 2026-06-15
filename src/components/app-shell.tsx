@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect } from "react";
+import { GroupChat } from "@/components/group-chat";
 import { Nav } from "@/components/nav";
 import { useSession } from "@/lib/auth-client";
 
@@ -29,6 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-24">
         <Suspense fallback={null}>{children}</Suspense>
       </main>
+      {authed && <GroupChat />}
     </>
   );
 }

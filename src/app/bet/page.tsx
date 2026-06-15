@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { parseAsInteger, parseAsStringLiteral, useQueryState } from "nuqs";
 import { MatchBetCard } from "@/components/match-bet-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,12 +28,15 @@ export default function BetPage() {
     "filter",
     parseAsStringLiteral(FILTER_KEYS),
   );
+  /* deep-link target from the group chat: ?m=<matchNumber> */
+  const [refMatch] = useQueryState("m", parseAsInteger);
   const liveProbe = useQuery({
     ...trpc.matches.list.queryOptions({ filter: "live" }),
     refetchInterval: 60_000,
   });
   const hasLive = (liveProbe.data?.length ?? 0) > 0;
-  const filter = urlFilter ?? (hasLive ? "live" : "open");
+  /* a referenced match must be visible regardless of the active tab */
+  const filter = refMatch ? "all" : (urlFilter ?? (hasLive ? "live" : "open"));
 
   const matches = useQuery({
     ...trpc.matches.list.queryOptions({ filter }),
@@ -117,6 +120,7 @@ export default function BetPage() {
               signedIn={signedIn}
               isAdmin={isAdmin}
               unread={unreadByMatch[m.id] ?? 0}
+              autoOpenComments={refMatch === m.matchNumber}
             />
           ))}
         </section>

@@ -79,6 +79,25 @@ export function initDatabase() {
     sql`CREATE INDEX IF NOT EXISTS comment_reactions_comment_idx ON comment_reactions(comment_id)`,
   );
 
+  /* persistent group chat + per-user read marker */
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      body text NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL
+    )
+  `);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS chat_messages_created_idx ON chat_messages(created_at)`,
+  );
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS chat_reads (
+      user_id text PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
+      last_read_at integer NOT NULL
+    )
+  `);
+
   /* betting odds cache (polled from ESPN) */
   db.run(sql`
     CREATE TABLE IF NOT EXISTS odds (

@@ -50,11 +50,13 @@ export function MatchBetCard({
   signedIn,
   isAdmin = false,
   unread = 0,
+  autoOpenComments = false,
 }: {
   match: MatchRow;
   signedIn: boolean;
   isAdmin?: boolean;
   unread?: number;
+  autoOpenComments?: boolean;
 }) {
   const trpc = useTRPC();
   const qc = useQueryClient();
@@ -96,6 +98,16 @@ export function MatchBetCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [home, away, canBet]);
 
+  /* deep-link from the group chat (?m=<n>) → open this match's thread + scroll */
+  useEffect(() => {
+    if (!autoOpenComments) return;
+    setChatOpen(true);
+    document
+      .getElementById(`match-${match.id}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenComments]);
+
   const picks = useQuery({
     ...trpc.bets.forMatch.queryOptions({ matchId: match.id }),
     enabled: picksOpen && match.locked,
@@ -105,7 +117,7 @@ export function MatchBetCard({
   const isLive = match.status === "live";
 
   return (
-    <Card className="gap-0 overflow-hidden py-0">
+    <Card id={`match-${match.id}`} className="gap-0 overflow-hidden py-0">
       {/* meta row */}
       <div className="flex items-center justify-between gap-2 border-b px-4 py-2 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">

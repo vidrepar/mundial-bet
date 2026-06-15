@@ -190,6 +190,31 @@ export const commentReactions = sqliteTable(
   ],
 );
 
+/* persistent group chat — one global room (WhatsApp-group style). Messages can
+ * inline-reference matches via `#<matchNumber>` tokens, resolved at read time. */
+export const chatMessages = sqliteTable(
+  "chat_messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [index("chat_messages_created_idx").on(t.createdAt)],
+);
+
+/* per-user last-read marker for the group chat → unread badge */
+export const chatReads = sqliteTable("chat_reads", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  lastReadAt: integer("last_read_at", { mode: "timestamp" }).notNull(),
+});
+
 /* latest betting odds per match, polled from ESPN's free no-auth odds feed.
  * Decimal odds (home/draw/away); refreshed on a throttle by the cron tick. */
 export const odds = sqliteTable("odds", {
