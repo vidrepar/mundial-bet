@@ -9,6 +9,21 @@ import { createTRPCRouter, protectedProcedure } from "../init";
 const MAX_HISTORY = 500;
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "😢", "🐐", "💀"] as const;
 
+/* only accept push endpoints that belong to a real browser push service —
+ * the endpoint is later fetched by web-push, so an open value is an SSRF sink */
+const PUSH_HOSTS = ["fcm.googleapis.com", "android.googleapis.com", "web.push.apple.com"];
+const PUSH_HOST_SUFFIXES = [".push.services.mozilla.com", ".notify.windows.com"];
+function isAllowedPushEndpoint(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    const h = u.hostname.toLowerCase();
+    return PUSH_HOSTS.includes(h) || PUSH_HOST_SUFFIXES.some((s) => h.endsWith(s));
+  } catch {
+    return false;
+  }
+}
+
 export const chatRouter = createTRPCRouter({
   /* whole room as a flat list (top-level + replies) with reactions and a
    * lookup of referenced matches; the client builds the 2-level tree */
@@ -205,7 +220,13 @@ export const chatRouter = createTRPCRouter({
   ),
 
   pushSubscribe: protectedProcedure
-    .input(z.object({ endpoint: z.string().url(), p256dh: z.string(), auth: z.string() }))
+    .input(
+      z.object({
+        endpoint: z.string().url().refine(isAllowedPushEndpoint, "unsupported push endpoint"),
+        p256dh: z.string().max(255),
+        auth: z.string().max(255),
+      }),
+    )
     .mutation(({ ctx, input }) => {
       db.insert(pushSubscriptions)
         .values({
@@ -215,9 +236,11 @@ export const chatRouter = createTRPCRouter({
           auth: input.auth,
           createdAt: new Date(),
         })
+        /* on conflict only update MY own row — never hijack another user's */
         .onConflictDoUpdate({
           target: pushSubscriptions.endpoint,
-          set: { userId: ctx.user.id, p256dh: input.p256dh, auth: input.auth },
+          set: { p256dh: input.p256dh, auth: input.auth },
+          where: eq(pushSubscriptions.userId, ctx.user.id),
         })
         .run();
       return { ok: true };
@@ -225,8 +248,15 @@ export const chatRouter = createTRPCRouter({
 
   pushUnsubscribe: protectedProcedure
     .input(z.object({ endpoint: z.string() }))
-    .mutation(({ input }) => {
-      db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, input.endpoint)).run();
+    .mutation(({ ctx, input }) => {
+      db.delete(pushSubscriptions)
+        .where(
+          and(
+            eq(pushSubscriptions.endpoint, input.endpoint),
+            eq(pushSubscriptions.userId, ctx.user.id),
+          ),
+        )
+        .run();
       return { ok: true };
     }),
 });
