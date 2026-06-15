@@ -23,26 +23,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [isPending, authed, pathname, router]);
 
-  /* branded skeleton during the auth check → instant paint, no white flash */
-  if (isPending) {
-    return (
-      <>
-        <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
-          <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4">
-            <span className="text-xl">⚽</span>
-            <Skeleton className="h-6 w-28" />
-            <Skeleton className="ml-auto size-7 rounded-full" />
-          </div>
-        </header>
-        <main className="mx-auto w-full max-w-5xl space-y-4 px-4 pb-24 pt-6">
-          <Skeleton className="h-9 w-40" />
-          <Skeleton className="h-32 w-full rounded-xl" />
-          <Skeleton className="h-32 w-full rounded-xl" />
-        </main>
-      </>
-    );
-  }
-  if (!authed && pathname !== "/login") return null;
+  /* branded skeleton during the auth check (and the pre-redirect frame) → it's
+   * in the static HTML, so first paint is instant with no white flash */
+  if (isPending || (!authed && pathname !== "/login")) return <BootSkeleton />;
 
   return (
     <>
@@ -56,6 +39,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <GroupChat />
         </Suspense>
       )}
+    </>
+  );
+}
+
+function BootSkeleton() {
+  return (
+    <>
+      <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4">
+          <span className="text-xl">⚽</span>
+          <Skeleton className="h-6 w-28" />
+          <Skeleton className="ml-auto size-7 rounded-full" />
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-5xl space-y-4 px-4 pb-24 pt-6">
+        <Skeleton className="h-9 w-40" />
+        <Skeleton className="h-32 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-xl" />
+      </main>
     </>
   );
 }

@@ -40,8 +40,12 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} min-h-screen antialiased`}>
+    <html
+      lang="en"
+      className="dark"
+      style={{ backgroundColor: "oklch(0.16 0.01 250)", colorScheme: "dark" }}
+    >
+      <body className={`${inter.className} min-h-screen bg-background antialiased`}>
         <TRPCReactProvider>
           <NuqsAdapter>
             <AppShell>{children}</AppShell>
