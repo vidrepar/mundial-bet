@@ -54,6 +54,8 @@ export async function fetchEspnMatches(dateKey: string): Promise<EspnMatch[]> {
       awayCode: String(away.team?.abbreviation ?? "").toUpperCase(),
       homeScore: num(home.score),
       awayScore: num(away.score),
+      homeWinner: home.winner === true,
+      awayWinner: away.winner === true,
       state,
       clock: short ? String(short) : null,
     });

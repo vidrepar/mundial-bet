@@ -20,6 +20,7 @@ const LINKS = [
   { href: "/analytics", label: "Analytics" },
   { href: "/rivals", label: "Rivals" },
   { href: "/awards", label: "Awards" },
+  { href: "/rules", label: "Pravila" },
 ];
 
 export function Nav() {

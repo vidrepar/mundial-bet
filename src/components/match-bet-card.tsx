@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/user-avatar";
 import { fmtKickoff, timeUntil } from "@/lib/format";
-import { maxPoints, scoreBet } from "@/lib/scoring";
+import { isKnockoutStage, maxPoints, scoreBet } from "@/lib/scoring";
 import { cn } from "@/lib/utils";
 import { useTRPC } from "@/trpc/client";
 
@@ -82,6 +82,12 @@ export function MatchBetCard({
   );
 
   const canBet = signedIn && !match.locked;
+  /* knockout draws are illegal — block the save and warn (mirrors the server) */
+  const koDraw =
+    isKnockoutStage(match.stage) &&
+    home !== "" &&
+    away !== "" &&
+    Number.parseInt(home, 10) === Number.parseInt(away, 10);
 
   /* auto-save the prediction (debounced) once both scores are valid */
   useEffect(() => {
@@ -89,6 +95,11 @@ export function MatchBetCard({
     const ph = Number.parseInt(home, 10);
     const pa = Number.parseInt(away, 10);
     if (Number.isNaN(ph) || Number.isNaN(pa)) return;
+    /* no draws in knockouts — pick a winner */
+    if (isKnockoutStage(match.stage) && ph === pa) {
+      setHint("idle");
+      return;
+    }
     if (match.myBet?.predHome === ph && match.myBet?.predAway === pa) return;
     setHint("saving");
     const t = setTimeout(
@@ -196,7 +207,11 @@ export function MatchBetCard({
                 onChange={(e) =>
                   setHome(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))
                 }
-                className="h-10 w-12 text-center text-lg"
+                className={cn(
+                  "h-10 w-12 text-center text-lg",
+                  koDraw &&
+                    "border-red-500 text-red-600 ring-1 ring-red-500 focus-visible:ring-red-500",
+                )}
                 placeholder="–"
               />
               <span className="text-muted-foreground">:</span>
@@ -206,7 +221,11 @@ export function MatchBetCard({
                 onChange={(e) =>
                   setAway(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))
                 }
-                className="h-10 w-12 text-center text-lg"
+                className={cn(
+                  "h-10 w-12 text-center text-lg",
+                  koDraw &&
+                    "border-red-500 text-red-600 ring-1 ring-red-500 focus-visible:ring-red-500",
+                )}
                 placeholder="–"
               />
             </div>
@@ -216,6 +235,11 @@ export function MatchBetCard({
           <span className="text-[10px] text-muted-foreground">
             {fmtKickoff(match.kickoff)}
           </span>
+          {koDraw && (
+            <span className="max-w-[9rem] text-center text-[10px] font-medium leading-tight text-red-600">
+              Ni neodločenih — izberi zmagovalca
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 justify-self-end">

@@ -13,7 +13,7 @@ import {
 import type { EspnMatch } from "@/lib/espn.types";
 import { enqueueEmail, flushOutbox } from "@/lib/notify";
 import { notifyUser } from "@/lib/push";
-import { scoreBet } from "@/lib/scoring";
+import { applyShootoutWinner, scoreBet } from "@/lib/scoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,14 +88,18 @@ async function handle(req: Request) {
           .run();
         updated++;
       } else if (ev.state === "post" && hs != null && as != null) {
+        /* knockout shootout: credit +1 to the side ESPN marks as advancing */
+        const hw = swapped ? ev.awayWinner : ev.homeWinner;
+        const aw = swapped ? ev.homeWinner : ev.awayWinner;
+        const { home: fhs, away: fas } = applyShootoutWinner(m.stage, hs, as, hw, aw);
         db.update(matches)
-          .set({ status: "finished", finished: true, homeScore: hs, awayScore: as, clock: null })
+          .set({ status: "finished", finished: true, homeScore: fhs, awayScore: fas, clock: null })
           .where(eq(matches.id, m.id))
           .run();
         /* auto-score every bet (admin can still reopen/setResult to override) */
         const matchBets = db.select().from(bets).where(eq(bets.matchId, m.id)).all();
         for (const b of matchBets) {
-          const pts = scoreBet(b.predHome, b.predAway, hs, as, m.stage);
+          const pts = scoreBet(b.predHome, b.predAway, fhs, fas, m.stage);
           db.update(bets).set({ points: pts }).where(eq(bets.id, b.id)).run();
         }
         const { subject, html } = buildResultEmail({
@@ -105,8 +109,8 @@ async function handle(req: Request) {
           awayTeam: m.awayTeam,
           homeFlag: m.homeFlag,
           awayFlag: m.awayFlag,
-          homeScore: hs,
-          awayScore: as,
+          homeScore: fhs,
+          awayScore: fas,
         });
         enqueueEmail(`result:${m.id}`, subject, html);
         finishedNow++;

@@ -28,6 +28,25 @@ export function maxPoints(stage: string): number {
   return isKnockoutStage(stage) ? 6 : 3;
 }
 
+/* Shootout rule: a knockout level after 90/120' and decided on penalties →
+ * the advancing side is credited +1 goal so the stored result has a winner
+ * (players can't predict a draw in knockouts). Group stage and already-decided
+ * results pass through unchanged. */
+export function applyShootoutWinner(
+  stage: string,
+  homeScore: number,
+  awayScore: number,
+  homeWon: boolean,
+  awayWon: boolean,
+): { home: number; away: number } {
+  if (isKnockoutStage(stage) && homeScore === awayScore && homeWon !== awayWon) {
+    return homeWon
+      ? { home: homeScore + 1, away: awayScore }
+      : { home: homeScore, away: awayScore + 1 };
+  }
+  return { home: homeScore, away: awayScore };
+}
+
 export function scoreBet(
   predHome: number,
   predAway: number,
